@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Fix: a throwing `ExportFinished` listener no longer turns a completed export into a failed one and deletes its file.
+- Fix: the list endpoint no longer calls the storage disk once per item (`download_url` no longer checks the file; `download` still answers 410 when it is gone).
+- Fix: concurrent POSTs can no longer exceed `max_active_per_user` (per-owner cache lock); the quota is checked before the filter and row count are evaluated.
+- Breaking: definition is now `GET {prefix}/definition?exportable={key}` (no route parameter that hosts may constrain).
+- Breaking: the runtime `QueryFilterCompatibility` gate is removed; the Composer constraint is the single source of truth.
+- xlsx uses OpenSpout (streamed, flat memory): default cap raised from 50k to 500k rows. Removes `maatwebsite/excel`.
+- Exportables can be registered through `config('export.exportables')`; `ExportRegistry::keys()` lists them (hosts use it to create one `<key>.export` permission per document).
+- Internals: `ExportPlan`, `GenerateExport`, `RetryExport`, per-format writers, state transitions on `DataExport`, simpler stale/active scopes, one row-count query for the cap with children, extra `(owner_id, created_at)` index.
+
 ## 0.1.1
 
 - Fix: `POST {prefix}` rejected `data.*` (filter, sort, search) with 422 "prohibited" in hosts that enable `FormRequest::failOnUnknownFields()`.

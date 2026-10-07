@@ -1,6 +1,6 @@
 # alifcoder/export-sdk
 
-Async document export (csv, xlsx, pdf) for Laravel, built on `alifcoder/query-filter` (`>=2.0.1 <3.0.0`).
+Async document export (csv, xlsx, pdf) for Laravel, built on `alifcoder/query-filter` (`^2.0.1`, enforced by Composer).
 
 ## Flow
 `POST {prefix}` validates against a server-side whitelist, stores a `data_exports` row and queues `RunExport`. The job runs as the owner (so the host filter's `before()` scope applies), streams rows with `lazy()`, flattens children and writes the file to the configured disk. Clients poll `GET {prefix}/{id}` and download from `GET {prefix}/{id}/download`. Files expire after `ttl_hours` and are pruned hourly.
@@ -8,17 +8,16 @@ Async document export (csv, xlsx, pdf) for Laravel, built on `alifcoder/query-fi
 ## Install
 1. `composer require alifcoder/export-sdk`
 2. `php artisan vendor:publish --tag=export-config --tag=export-migrations`, then migrate.
-3. Set `routes.prefix`, `routes.middleware`, `guard`, `owner_key_type`, `queue.name` in `config/export.php`.
+3. Set `routes.prefix`, `routes.middleware`, `guard`, `owner_key_type`, `queue.name` in `config/export.php`. The queue must be consumed by a worker (Horizon supervisor, `queue:work`). `StartExport` needs a cache store with atomic locks (redis, database, file, memcached, array).
 4. Define the Gate ability (`export.ability`, default `data-export`): `Gate::define('data-export', fn ($user, string $key) => ...)`, or bind your own `Alif\Export\Contracts\ExportAuth`.
 5. Run a queue worker for the configured queue with enough memory/timeout for xlsx and pdf. The worker/connection `retry_after` must exceed `export.queue.timeout`, otherwise a slow export is redelivered while still running. Rows stuck in `processing` (started more than `queue.timeout + stale_margin_seconds` ago) or `pending` (created more than `stale_pending_hours` ago, default 24) stop counting toward the active quota and are pruned with their files; failed rows are pruned after `ttl_hours`.
 
 6. Host gotchas found integrating with a real app:
-   - A host that forces a UUID pattern on **every** route parameter (e.g. a `RouteServiceProvider` loop calling `$route->where($param, $uuid)`) must exempt `exportable`, otherwise `GET {prefix}/exportables/{key}` is a 404 (keys look like `sale.sales`).
    - `FormRequest::failOnUnknownFields()` is supported: `StoreExportRequest` opts out because `data` is validated by the host filter.
    - Set `routes.prefix` to where your API lives (e.g. `api/v1/exports`) and `routes.middleware` to your API auth; `guard` must be the guard whose provider resolves the owner in the queue job.
 
 ## Host contracts
-- `Contracts\Exportable`: one class per document (title, columns, optional hasMany child relation and child columns, base query, `filter(array $params): EBFilterInterface`). Register in a service provider: `app(ExportRegistry::class)->register('sale.sales', SaleExportable::class)`.
+- `Contracts\Exportable`: one class per document (title, columns, optional hasMany child relation and child columns, base query, `filter(array $params): EBFilterInterface`). Register them in `config/export.php` (`'exportables' => ['sale.sales' => SaleExportable::class]`) or from a service provider: `app(ExportRegistry::class)->register('sale.sales', SaleExportable::class)`.
 - `Contracts\ExportAuth`: `allows($user, $key)` and `actingAs($ownerId, Closure)`. Default `LaravelExportAuth` uses the Gate and the guard's user provider.
 - Columns declare the relations they need (`Column::make('Customer', fn ($row) => $row->customer->name)->relations('customer')`). Undeclared relations fail the job (lazy loading is prevented during export).
 
@@ -30,7 +29,7 @@ Async document export (csv, xlsx, pdf) for Laravel, built on `alifcoder/query-fi
             "include_children": true, "child_columns": ["sku", "qty"], "title": "Sales" } }
 ```
 Response `202 {"data": {id, exportable, format, status, rows_count, error_code, created_at, finished_at, expires_at, download_url}}`.
-`GET {prefix}/exportables/{key}` returns the definition (formats with row caps, columns). Errors: 422 validation / row cap, 403 permission, 404 not owner, 409 not ready, 410 expired, 429 too many active exports.
+`GET {prefix}/definition?exportable={key}` returns the definition (formats with row caps, columns). Errors: 422 validation / row cap, 403 permission, 404 not owner, 409 not ready, 410 expired, 429 too many active exports.
 
 ### Managing exports
 - `GET {prefix}?status=&exportable=&per_page=` lists the caller's exports, newest first (simple pagination, `per_page` 1-100, default 20).
@@ -45,12 +44,9 @@ Only `export.data_parameters` keys of `data` reach the filter; top-level `export
 
 ## Layout and safety
 - Children are flattened: one row per child with document columns repeated; a document without children yields one row with blank child cells. Output order: `columns` then `child_columns`.
-- Caps count output rows (csv 500k, xlsx 50k, pdf 2k).
+- Caps count output rows (csv 500k, xlsx 500k, pdf 2k).
 - csv: formula-prefix guard on non-numeric columns, UTF-8 BOM. xlsx: non-numeric cells are inert strings. pdf: escaped Blade output, no remote/PHP/JS.
 - bool is `1`/`0`; dates are `Y-m-d H:i:s`; override per column with a closure.
-
-## Version gate
-`Support\QueryFilterCompatibility` (`MIN`, `MAX_EXCLUSIVE`) is checked lazily at export entry points (controller actions and `RunExport`), never at boot. Keep it in sync with the `composer.json` constraint.
 
 ## Host example
 ```php
@@ -77,10 +73,10 @@ Gate::define('data-export', fn ($user, string $key) => $user->can("export.$key")
 ```
 
 ## Performance and sizing
-Measured with `tests/Stress` (sqlite, 2 child lines per document): 50k xlsx / csv rows in 5s / 2s, peak memory 212MB / 46MB. Memory for csv stays flat (rows are streamed).
+Measured with `tests/Stress` (2 child lines per document, Postgres 16): csv 500k rows in 54s at 48MB peak, xlsx 500k rows in 55s at 48MB peak (rows are streamed to disk by OpenSpout), pdf 2k rows in 7-12s at 560-630MB. csv and xlsx memory stays flat; pdf does not (dompdf renders the whole document).
 - **Index the child foreign key** (`order_lines.order_id`). The submit-time row count and the eager load both filter on it; without the index a 25k-document export took 160s instead of 2s.
 - **pdf is memory-heavy** (dompdf builds the whole document): 2,000 rows peaked at ~630MB. Give pdf workers `memory_limit` of 1GB or lower `export.max_rows.pdf`.
-- Re-run on your own data and infrastructure: `STRESS_ROWS=50000 STRESS_MEMORY_MB=512 vendor/bin/phpunit --group stress`.
+- Re-run on your own data and infrastructure: `STRESS_ROWS=250000 STRESS_MEMORY_MB=512 vendor/bin/phpunit --group stress`.
 
 ## Deployment
 - Use a disk shared by web and worker servers (s3, nfs) for `export.disk`; a `local` disk breaks downloads when they run on different machines.
@@ -94,6 +90,15 @@ composer test
 vendor/bin/pint     # fix style
 ```
 Row caps count flattened output rows, checked at submit (422) and again while streaming.
+
+Opt-in suites (excluded from `composer test`):
+```
+# Postgres instead of sqlite (any suite): TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_USERNAME=... TEST_DB_PASSWORD=... TEST_DB_DATABASE=...
+# Real S3 + real Redis queue (needs an S3-compatible endpoint on :59090 with bucket export-test, Redis on :56379):
+TEST_INFRA=1 TEST_DB_HOST=... vendor/bin/phpunit --group infra
+# Scale / memory:
+STRESS_ROWS=25000 STRESS_CSV_ROWS=250000 STRESS_PDF_ROWS=1000 vendor/bin/phpunit --group stress
+```
 
 ## Troubleshooting
 - Export stays `pending`: no worker on the `export.queue.name` queue.
