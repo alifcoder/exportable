@@ -6,6 +6,7 @@ namespace Alif\Export\Services\Interfaces;
 
 use Alif\Export\Contracts\Exportable;
 use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\DTO\Export\ExportDownloadDTO;
 use Alif\Export\DTO\Export\ExportListDTO;
 use Alif\Export\Entities\DataExport;
 use Alif\Export\Exceptions\ExportException;
@@ -26,7 +27,7 @@ interface ExportServiceInterface
     public function all(ExportListDTO $dto): Paginator;
 
     /** @throws ExportException Not found, or not owned by $owner. */
-    public function findOwned(Authenticatable $owner, string $id): DataExport;
+    public function find(Authenticatable $owner, string $id): DataExport;
 
     /**
      * @throws ValidationException When the host filter or the row cap rejects the request.
@@ -35,18 +36,24 @@ interface ExportServiceInterface
     public function create(Authenticatable $owner, ExportCreateDTO $dto): DataExport;
 
     /**
-     * @throws ExportException Not failed, forbidden, or too many active exports.
+     * Starts a new export with the options of the owner's failed one.
+     *
+     * @throws ExportException Not found, not failed, forbidden, or too many active exports.
      * @throws ValidationException When the definition no longer has the chosen columns.
      */
-    public function retry(Authenticatable $owner, DataExport $failed): DataExport;
+    public function retry(Authenticatable $owner, string $id): DataExport;
 
     /**
      * Cancels a pending export or deletes a finished one together with its file.
      *
-     * @throws ExportException Being processed.
+     * @throws ExportException Not found, or being processed.
      */
-    public function delete(DataExport $export): void;
+    public function delete(Authenticatable $owner, string $id): void;
 
-    /** @throws ExportException Forbidden, not ready, or the file is gone. */
-    public function assertDownloadable(Authenticatable $owner, DataExport $export): void;
+    /**
+     * Where the file of a completed export lives and how to serve it. The permission is re-checked on every call.
+     *
+     * @throws ExportException Not found, forbidden, not ready, or the file is gone.
+     */
+    public function download(Authenticatable $owner, string $id): ExportDownloadDTO;
 }

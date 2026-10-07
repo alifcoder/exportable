@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Feature;
 
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
+use Alif\Export\Helpers\ExportFile;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
 use Alif\Export\Tests\Fixtures\Order;
@@ -121,7 +123,7 @@ final class ExportFlowTest extends TestCase
             $id = $this->actingAs($this->user)->postJson('/exports', $payload)->json('data.id');
             $export = DataExport::findOrFail($id);
 
-            $this->assertSame('completed', $export->status, $format.' '.$export->error_code);
+            $this->assertSame(ExportStatus::COMPLETED, $export->status, $format.' '.$export->error_code);
             Storage::disk('local')->assertExists($export->path);
         }
     }
@@ -134,7 +136,7 @@ final class ExportFlowTest extends TestCase
         $id = $this->actingAs($this->user)->postJson('/exports', $payload)->json('data.id');
         $export = DataExport::findOrFail($id);
 
-        $this->assertSame('failed', $export->status);
+        $this->assertSame(ExportStatus::FAILED, $export->status);
         $this->assertSame('export_failed', $export->error_code);
     }
 
@@ -146,7 +148,7 @@ final class ExportFlowTest extends TestCase
 
         $id = $this->actingAs($this->user)->postJson('/exports', $payload)->json('data.id');
 
-        $this->assertSame('failed', DataExport::findOrFail($id)->status);
+        $this->assertSame(ExportStatus::FAILED, DataExport::findOrFail($id)->status);
     }
 
     public function test_row_cap_counts_flattened_output_rows_at_submit(): void
@@ -186,7 +188,7 @@ final class ExportFlowTest extends TestCase
         Queue::fake();
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload(false))->assertStatus(202)->json('data.id');
         Queue::assertPushed(RunExport::class);
-        $this->assertSame('pending', DataExport::findOrFail($id)->status);
+        $this->assertSame(ExportStatus::PENDING, DataExport::findOrFail($id)->status);
 
         // Worker process: nobody is authenticated.
         Auth::forgetUser();
@@ -195,7 +197,7 @@ final class ExportFlowTest extends TestCase
         app()->call([new RunExport($id), 'handle']);
 
         $export = DataExport::findOrFail($id);
-        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
         $csv = Storage::disk('local')->get($export->path);
 
         $this->assertStringContainsString('MINE-1', $csv);
@@ -243,7 +245,7 @@ final class ExportFlowTest extends TestCase
             'owner_id' => (string) $this->user->getKey(),
             'exportable' => 'orders',
             'format' => 'csv',
-            'status' => DataExport::STATUS_PENDING,
+            'status' => ExportStatus::PENDING,
             'options' => [],
             'locale' => 'en',
         ]);
@@ -258,7 +260,7 @@ final class ExportFlowTest extends TestCase
     public function test_live_processing_row_with_old_created_at_survives_prune(): void
     {
         $row = $this->makeExport([
-            'status' => DataExport::STATUS_PROCESSING,
+            'status' => ExportStatus::PROCESSING,
             'created_at' => now()->subMinutes(45),
             'started_at' => now()->subMinutes(5),
         ]);
@@ -273,7 +275,7 @@ final class ExportFlowTest extends TestCase
     {
         Storage::disk('local')->put('exports/stuck.csv', 'x');
         $row = $this->makeExport([
-            'status' => DataExport::STATUS_PROCESSING,
+            'status' => ExportStatus::PROCESSING,
             'created_at' => now()->subHours(3),
             'started_at' => now()->subHours(2),
             'disk' => 'local',
@@ -311,8 +313,8 @@ final class ExportFlowTest extends TestCase
 
     public function test_failed_row_older_than_ttl_is_pruned_and_recent_failed_kept(): void
     {
-        $old = $this->makeExport(['status' => DataExport::STATUS_FAILED, 'finished_at' => now()->subHours(48)]);
-        $recent = $this->makeExport(['status' => DataExport::STATUS_FAILED, 'finished_at' => now()->subHour()]);
+        $old = $this->makeExport(['status' => ExportStatus::FAILED, 'finished_at' => now()->subHours(48)]);
+        $recent = $this->makeExport(['status' => ExportStatus::FAILED, 'finished_at' => now()->subHour()]);
 
         $this->artisan('model:prune', ['--model' => [DataExport::class]])->assertSuccessful();
 
@@ -326,9 +328,9 @@ final class ExportFlowTest extends TestCase
         $this->assertMatchesRegularExpression('/^select \* from "data_exports" where \(.+\)$/', $sql);
 
         foreach (range(1, 5) as $_) {
-            $this->makeExport(['status' => DataExport::STATUS_FAILED, 'finished_at' => now()->subHours(48)]);
+            $this->makeExport(['status' => ExportStatus::FAILED, 'finished_at' => now()->subHours(48)]);
         }
-        $keep = $this->makeExport(['status' => DataExport::STATUS_COMPLETED, 'expires_at' => now()->addHour()]);
+        $keep = $this->makeExport(['status' => ExportStatus::COMPLETED, 'expires_at' => now()->addHour()]);
 
         $this->assertSame(5, (new DataExport)->pruneAll(2));
         $this->assertSame([$keep->id], DataExport::query()->pluck('id')->all());
@@ -336,8 +338,8 @@ final class ExportFlowTest extends TestCase
 
     public function test_processing_row_without_started_at_uses_created_at_for_staleness(): void
     {
-        $stale = $this->makeExport(['status' => DataExport::STATUS_PROCESSING, 'created_at' => now()->subHours(3)]);
-        $live = $this->makeExport(['status' => DataExport::STATUS_PROCESSING, 'created_at' => now()->subMinutes(5)]);
+        $stale = $this->makeExport(['status' => ExportStatus::PROCESSING, 'created_at' => now()->subHours(3)]);
+        $live = $this->makeExport(['status' => ExportStatus::PROCESSING, 'created_at' => now()->subMinutes(5)]);
 
         $this->assertSame([$live->id], DataExport::query()->active()->pluck('id')->all());
         $this->assertSame([$stale->id], DataExport::query()->stale()->pluck('id')->all());
@@ -350,9 +352,9 @@ final class ExportFlowTest extends TestCase
 
     public function test_failed_row_without_finished_at_is_pruned_by_updated_at(): void
     {
-        $old = $this->makeExport(['status' => DataExport::STATUS_FAILED]);
+        $old = $this->makeExport(['status' => ExportStatus::FAILED]);
         DataExport::query()->whereKey($old->id)->update(['updated_at' => now()->subHours(48)]);
-        $recent = $this->makeExport(['status' => DataExport::STATUS_FAILED]);
+        $recent = $this->makeExport(['status' => ExportStatus::FAILED]);
 
         $this->artisan('model:prune', ['--model' => [DataExport::class]])->assertSuccessful();
 
@@ -364,13 +366,13 @@ final class ExportFlowTest extends TestCase
     {
         Storage::disk('local')->put('exports/crashed.csv', 'x');
         $row = $this->makeExport([
-            'status' => DataExport::STATUS_PROCESSING,
+            'status' => ExportStatus::PROCESSING,
             'started_at' => now()->subHours(2),
             'disk' => 'local',
             'path' => 'exports/crashed.csv',
         ]);
 
-        $this->assertFalse($row->isDownloadable());
+        $this->assertFalse(app(ExportFile::class)->isDownloadable($row));
         $this->assertArrayNotHasKey('path', (new ExportResource($row))->toArray(request()));
         $this->assertArrayNotHasKey('disk', (new ExportResource($row))->toArray(request()));
 
@@ -385,7 +387,7 @@ final class ExportFlowTest extends TestCase
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload(false))->json('data.id');
         $export = DataExport::findOrFail($id);
 
-        $this->assertSame('completed', $export->status);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status);
         $this->assertNotNull($export->disk);
         $this->assertNotNull($export->path);
     }

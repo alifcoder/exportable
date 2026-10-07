@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Services\Actions\Export;
 
 use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Entities\DataExport;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
@@ -47,7 +48,7 @@ final readonly class GenerateExport
 
     private function write(DataExport $export, Authenticatable $owner): int
     {
-        $dto = $export->exportDto();
+        $dto = ExportCreateDTO::fromArray($export->options);
 
         if (! $this->auth->allows($owner, $dto->exportable)) {
             throw ExportException::forbidden();

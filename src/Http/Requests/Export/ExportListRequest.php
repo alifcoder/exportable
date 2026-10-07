@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Http\Requests\Export;
 
 use Alif\Export\DTO\Export\ExportListDTO;
-use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Illuminate\Foundation\Http\Attributes\FailOnUnknownFields;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,9 +18,7 @@ final class ExportListRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => ['sometimes', 'string', Rule::in([
-                DataExport::STATUS_PENDING, DataExport::STATUS_PROCESSING, DataExport::STATUS_COMPLETED, DataExport::STATUS_FAILED,
-            ])],
+            'status' => ['sometimes', 'string', Rule::enum(ExportStatus::class)],
             'exportable' => ['sometimes', 'string', 'max:100'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ];
@@ -28,9 +26,11 @@ final class ExportListRequest extends FormRequest
 
     public function getDto(): ExportListDTO
     {
+        $status = $this->validated('status');
+
         return new ExportListDTO(
             ownerId: (string) $this->user()->getAuthIdentifier(),
-            status: $this->validated('status'),
+            status: $status === null ? null : ExportStatus::from($status),
             exportable: $this->validated('exportable'),
             perPage: (int) $this->validated('per_page', 20),
         );

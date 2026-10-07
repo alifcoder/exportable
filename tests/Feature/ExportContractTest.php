@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Feature;
 
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
@@ -72,7 +73,7 @@ final class ExportContractTest extends TestCase
         $response = $this->submit($payload);
         $response->assertStatus(202);
         $export = DataExport::findOrFail($response->json('data.id'));
-        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
 
         return $export;
     }
@@ -99,7 +100,7 @@ final class ExportContractTest extends TestCase
             'owner_id' => (string) $this->user->getKey(),
             'exportable' => 'orders',
             'format' => 'csv',
-            'status' => DataExport::STATUS_PENDING,
+            'status' => ExportStatus::PENDING,
             'options' => [],
             'locale' => 'en',
         ])->refresh();
@@ -315,7 +316,7 @@ final class ExportContractTest extends TestCase
 
     public function test_download_is_409_while_pending_or_processing(): void
     {
-        foreach ([DataExport::STATUS_PENDING, DataExport::STATUS_PROCESSING] as $status) {
+        foreach ([ExportStatus::PENDING, ExportStatus::PROCESSING] as $status) {
             $export = $this->makeExport(['status' => $status]);
 
             $this->actingAs($this->user)->get("/exports/{$export->id}/download")->assertStatus(409);

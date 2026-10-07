@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Feature;
 
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
-use Alif\Export\Services\Actions\Export\GenerateExport;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderLine;
@@ -51,7 +51,7 @@ final class ExportManagementTest extends TestCase
             'owner_id' => (string) ($owner ?? $this->user)->getKey(),
             'exportable' => 'orders',
             'format' => 'csv',
-            'status' => DataExport::STATUS_PENDING,
+            'status' => ExportStatus::PENDING,
             'options' => ['exportable' => 'orders', 'format' => 'csv', 'columns' => ['number'], 'include_children' => false, 'child_columns' => [], 'title' => null, 'parameters' => []],
             'locale' => 'en',
         ])->refresh();
@@ -62,8 +62,8 @@ final class ExportManagementTest extends TestCase
     public function test_index_lists_only_own_exports_newest_first_with_filters(): void
     {
         $other = User::create(['name' => 'o']);
-        $old = $this->makeExport(['status' => DataExport::STATUS_FAILED, 'created_at' => now()->subHour()]);
-        $new = $this->makeExport(['status' => DataExport::STATUS_PENDING]);
+        $old = $this->makeExport(['status' => ExportStatus::FAILED, 'created_at' => now()->subHour()]);
+        $new = $this->makeExport(['status' => ExportStatus::PENDING]);
         $this->makeExport([], $other);
 
         $this->actingAs($this->user)->getJson('/exports')
@@ -82,7 +82,7 @@ final class ExportManagementTest extends TestCase
         $this->actingAs($this->user)->getJson('/exports?per_page=101')->assertStatus(422);
 
         foreach (range(1, 3) as $_) {
-            $this->makeExport(['status' => DataExport::STATUS_FAILED]);
+            $this->makeExport(['status' => ExportStatus::FAILED]);
         }
         $this->actingAs($this->user)->getJson('/exports?per_page=2')
             ->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('meta.per_page', 2);
@@ -99,7 +99,7 @@ final class ExportManagementTest extends TestCase
         $this->actingAs($this->user)->deleteJson("/exports/{$id}")->assertNoContent();
         $this->assertNull(DataExport::find($id));
 
-        (new RunExport($id))->handle(app(GenerateExport::class));
+        app()->call([new RunExport($id), 'handle']);
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
@@ -118,18 +118,18 @@ final class ExportManagementTest extends TestCase
 
     public function test_live_processing_export_cannot_be_deleted_but_a_stale_one_can(): void
     {
-        $live = $this->makeExport(['status' => DataExport::STATUS_PROCESSING, 'started_at' => now()]);
+        $live = $this->makeExport(['status' => ExportStatus::PROCESSING, 'started_at' => now()]);
         $this->actingAs($this->user)->deleteJson("/exports/{$live->id}")->assertStatus(409);
         $this->assertNotNull(DataExport::find($live->id));
 
-        $stale = $this->makeExport(['status' => DataExport::STATUS_PROCESSING, 'started_at' => now()->subDay()]);
+        $stale = $this->makeExport(['status' => ExportStatus::PROCESSING, 'started_at' => now()->subDay()]);
         $this->actingAs($this->user)->deleteJson("/exports/{$stale->id}")->assertNoContent();
     }
 
     public function test_foreign_export_is_404_for_delete_and_retry(): void
     {
         $other = User::create(['name' => 'o']);
-        $theirs = $this->makeExport(['status' => DataExport::STATUS_FAILED], $other);
+        $theirs = $this->makeExport(['status' => ExportStatus::FAILED], $other);
 
         $this->actingAs($this->user)->deleteJson("/exports/{$theirs->id}")->assertNotFound();
         $this->actingAs($this->user)->postJson("/exports/{$theirs->id}/retry")->assertNotFound();
@@ -141,18 +141,18 @@ final class ExportManagementTest extends TestCase
     public function test_failed_export_can_be_retried_as_a_new_export(): void
     {
         Order::create(['number' => 'A', 'total' => '1']);
-        $failed = $this->makeExport(['status' => DataExport::STATUS_FAILED, 'error_code' => 'export_failed']);
+        $failed = $this->makeExport(['status' => ExportStatus::FAILED, 'error_code' => 'export_failed']);
 
         $response = $this->actingAs($this->user)->postJson("/exports/{$failed->id}/retry")->assertStatus(202);
 
         $this->assertNotSame($failed->id, $response->json('data.id'));
-        $this->assertSame('completed', DataExport::findOrFail($response->json('data.id'))->status);
-        $this->assertSame('failed', $failed->refresh()->status);
+        $this->assertSame(ExportStatus::COMPLETED, DataExport::findOrFail($response->json('data.id'))->status);
+        $this->assertSame(ExportStatus::FAILED, $failed->refresh()->status);
     }
 
     public function test_only_failed_exports_can_be_retried(): void
     {
-        foreach ([DataExport::STATUS_PENDING, DataExport::STATUS_PROCESSING, DataExport::STATUS_COMPLETED] as $status) {
+        foreach ([ExportStatus::PENDING, ExportStatus::PROCESSING, ExportStatus::COMPLETED] as $status) {
             $export = $this->makeExport(['status' => $status]);
             $this->actingAs($this->user)->postJson("/exports/{$export->id}/retry")->assertStatus(409);
         }
@@ -161,13 +161,13 @@ final class ExportManagementTest extends TestCase
     public function test_retry_is_422_when_definition_no_longer_has_the_columns_and_403_when_denied(): void
     {
         $gone = $this->makeExport([
-            'status' => DataExport::STATUS_FAILED,
+            'status' => ExportStatus::FAILED,
             'options' => ['exportable' => 'orders', 'format' => 'csv', 'columns' => ['removed'], 'include_children' => false, 'child_columns' => [], 'title' => null, 'parameters' => []],
         ]);
         $this->actingAs($this->user)->postJson("/exports/{$gone->id}/retry")
             ->assertStatus(422)->assertJsonValidationErrors(['exportable']);
 
-        $failed = $this->makeExport(['status' => DataExport::STATUS_FAILED]);
+        $failed = $this->makeExport(['status' => ExportStatus::FAILED]);
         Gate::define('data-export', fn (): bool => false);
         $this->actingAs($this->user)->postJson("/exports/{$failed->id}/retry")->assertForbidden();
     }
@@ -175,8 +175,8 @@ final class ExportManagementTest extends TestCase
     public function test_retry_respects_the_active_quota(): void
     {
         config(['queue.default' => 'null', 'export.max_active_per_user' => 1]);
-        $this->makeExport(['status' => DataExport::STATUS_PENDING]);
-        $failed = $this->makeExport(['status' => DataExport::STATUS_FAILED]);
+        $this->makeExport(['status' => ExportStatus::PENDING]);
+        $failed = $this->makeExport(['status' => ExportStatus::FAILED]);
 
         $this->actingAs($this->user)->postJson("/exports/{$failed->id}/retry")->assertStatus(429);
     }
@@ -204,8 +204,8 @@ final class ExportManagementTest extends TestCase
         $ok = $this->actingAs($this->user)->postJson('/exports', $this->payload())->json('data.id');
         $bad = $this->actingAs($this->user)->postJson('/exports', $this->payload(['columns' => ['undeclared'], 'include_children' => false]))->json('data.id');
 
-        Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $ok && $e->export->status === 'completed');
-        Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $bad && $e->export->status === 'failed');
+        Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $ok && $e->export->status === ExportStatus::COMPLETED);
+        Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $bad && $e->export->status === ExportStatus::FAILED);
     }
 
     // ---- host with failOnUnknownFields ------------------------------------------------
@@ -235,7 +235,7 @@ final class ExportManagementTest extends TestCase
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->assertStatus(202)->json('data.id');
 
         $export = DataExport::findOrFail($id);
-        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
         $this->assertTrue(Storage::disk('local')->exists($export->path));
     }
 
@@ -243,7 +243,7 @@ final class ExportManagementTest extends TestCase
     {
         // The file is missing on purpose: the list must not look for it (one storage call per item on S3).
         $export = $this->makeExport([
-            'status' => DataExport::STATUS_COMPLETED, 'disk' => 'local', 'path' => 'exports/missing.csv', 'expires_at' => now()->addHour(),
+            'status' => ExportStatus::COMPLETED, 'disk' => 'local', 'path' => 'exports/missing.csv', 'expires_at' => now()->addHour(),
         ]);
 
         $this->actingAs($this->user)->getJson('/exports')->assertOk()->assertJsonPath('data.0.download_url', route('export.download', $export->id));
@@ -253,7 +253,7 @@ final class ExportManagementTest extends TestCase
     public function test_quota_is_checked_before_the_filter_and_row_count_are_evaluated(): void
     {
         config(['queue.default' => 'null', 'export.max_active_per_user' => 1]);
-        $this->makeExport(['status' => DataExport::STATUS_PENDING]);
+        $this->makeExport(['status' => ExportStatus::PENDING]);
 
         // An invalid filter would be a 422 if the request were evaluated first.
         $this->actingAs($this->user)->postJson('/exports', $this->payload() + ['data' => ['filter' => ['total' => ['bogus' => 1]]]])
@@ -288,7 +288,7 @@ final class ExportManagementTest extends TestCase
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->assertStatus(202)->json('data.id');
         DataExport::query()->whereKey($id)->update(['options' => ['exportable' => 'orders', 'format' => 'csv', 'columns' => ['gone'], 'include_children' => false, 'child_columns' => [], 'title' => null, 'parameters' => []]]);
 
-        (new RunExport($id))->handle(app(GenerateExport::class));
+        app()->call([new RunExport($id), 'handle']);
 
         $this->assertSame('unknown_column', DataExport::findOrFail($id)->error_code);
     }
@@ -307,7 +307,7 @@ final class ExportManagementTest extends TestCase
         ]))->assertStatus(202)->json('data.id');
 
         $export = DataExport::findOrFail($id);
-        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
         $this->assertSame(3, $export->rows_count);
 
         $local = tempnam(sys_get_temp_dir(), 'x').'.xlsx';
@@ -333,10 +333,10 @@ final class ExportManagementTest extends TestCase
 
         Order::create(['number' => 'B', 'total' => '1']);
         Order::create(['number' => 'C', 'total' => '1']);
-        (new RunExport($id))->handle(app(GenerateExport::class));
+        app()->call([new RunExport($id), 'handle']);
 
         $export = DataExport::findOrFail($id);
-        $this->assertSame('failed', $export->status);
+        $this->assertSame(ExportStatus::FAILED, $export->status);
         $this->assertSame('row_limit_exceeded', $export->error_code);
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
@@ -346,7 +346,7 @@ final class ExportManagementTest extends TestCase
         Order::create(['number' => 'A', 'total' => '1']);
         Queue::fake();
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->json('data.id');
-        $handle = fn () => (new RunExport($id))->handle(app(GenerateExport::class));
+        $handle = fn () => app()->call([new RunExport($id), 'handle']);
 
         $handle();
         $first = DataExport::findOrFail($id);

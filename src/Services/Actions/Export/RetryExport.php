@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Alif\Export\Services\Actions\Export;
 
 use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportRegistry;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -26,11 +28,11 @@ final readonly class RetryExport
      */
     public function __invoke(Authenticatable $owner, DataExport $failed): DataExport
     {
-        if ($failed->status !== DataExport::STATUS_FAILED) {
+        if ($failed->status !== ExportStatus::FAILED) {
             throw ExportException::notFailed();
         }
 
-        $dto = $failed->exportDto();
+        $dto = ExportCreateDTO::fromArray($failed->options);
 
         if (! $this->auth->allows($owner, $dto->exportable)) {
             throw ExportException::forbidden();

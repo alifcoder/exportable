@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Stress;
 
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\User;
@@ -67,7 +68,7 @@ final class ExportStressTest extends TestCase
             $format, $documents, (int) $export->rows_count, $seconds, $peakMb, $before / 1048576, $size / 1048576,
         ));
 
-        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
         $this->assertSame($documents * 2, $export->rows_count);
         $this->assertLessThan($memoryBudgetMb, $peakMb, "peak memory {$peakMb}MB over {$memoryBudgetMb}MB budget");
     }

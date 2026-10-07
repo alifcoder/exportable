@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Infra;
 
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
 use Alif\Export\Tests\Fixtures\Order;
@@ -87,7 +88,7 @@ final class InfraTest extends TestCase
             $id = $this->actingAs($this->user)->postJson('/exports', $this->payload($format))->assertStatus(202)->json('data.id');
             $export = DataExport::findOrFail($id);
 
-            $this->assertSame('completed', $export->status, (string) $export->error_code);
+            $this->assertSame(ExportStatus::COMPLETED, $export->status, (string) $export->error_code);
             $this->assertSame('s3test', $export->disk);
             $this->assertTrue(Storage::disk('s3test')->exists($export->path), "{$format} object missing in S3");
 
@@ -115,13 +116,13 @@ final class InfraTest extends TestCase
 
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload('csv'))->assertStatus(202)->json('data.id');
 
-        $this->assertSame('pending', DataExport::findOrFail($id)->status);
+        $this->assertSame(ExportStatus::PENDING, DataExport::findOrFail($id)->status);
         $this->assertSame(1, Queue::connection('redis')->size('exports'), 'job should be waiting in Redis');
 
         Artisan::call('queue:work', ['connection' => 'redis', '--queue' => 'exports', '--once' => true]);
 
         $first = DataExport::findOrFail($id);
-        $this->assertSame('completed', $first->status, (string) $first->error_code);
+        $this->assertSame(ExportStatus::COMPLETED, $first->status, (string) $first->error_code);
         $this->assertSame(0, Queue::connection('redis')->size('exports'));
 
         // Redelivery of the same job: must not run a second time or change the file.
@@ -146,7 +147,7 @@ final class InfraTest extends TestCase
         Artisan::call('queue:work', ['connection' => 'redis', '--queue' => 'exports', '--once' => true]);
 
         $export = DataExport::findOrFail($id);
-        $this->assertSame('failed', $export->status);
+        $this->assertSame(ExportStatus::FAILED, $export->status);
         $this->assertSame(0, Queue::connection('redis')->size('exports'), 'tries=1: no redelivery');
         $this->assertSame([], Storage::disk('local')->allFiles('exports'));
     }

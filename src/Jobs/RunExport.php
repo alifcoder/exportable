@@ -7,6 +7,9 @@ namespace Alif\Export\Jobs;
 use Alif\Export\Entities\DataExport;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Services\Actions\Export\ClaimExport;
+use Alif\Export\Services\Actions\Export\CompleteExport;
+use Alif\Export\Services\Actions\Export\FailExport;
 use Alif\Export\Services\Actions\Export\GenerateExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,7 +39,7 @@ final class RunExport implements ShouldQueue
         $this->onQueue(config('export.queue.name'));
     }
 
-    public function handle(GenerateExport $generate): void
+    public function handle(GenerateExport $generate, ClaimExport $claim, CompleteExport $complete, FailExport $fail): void
     {
         $export = DataExport::query()->find($this->exportId);
 
@@ -48,15 +51,15 @@ final class RunExport implements ShouldQueue
         $path = sprintf('%s/%s.%s', trim((string) config('export.directory', 'exports'), '/'), Str::uuid(), $export->format);
 
         // A redelivered or already finished job must not run the export twice.
-        if (! $export->claim($disk, $path)) {
+        if (! $claim($export, $disk, $path)) {
             return;
         }
 
         try {
-            $export->markCompleted($generate($export));
+            $complete($export, $generate($export));
         } catch (Throwable $e) {
             Storage::disk($disk)->delete($path);
-            $this->recordFailure($export, $e);
+            $this->recordFailure($export, $e, $fail);
 
             return;
         }
@@ -69,14 +72,14 @@ final class RunExport implements ShouldQueue
     {
         $export = DataExport::query()->find($this->exportId);
 
-        if ($export !== null && $export->isInFlight()) {
-            $this->recordFailure($export, $e);
+        if ($export !== null && $export->status->isInFlight()) {
+            $this->recordFailure($export, $e, app(FailExport::class));
         }
     }
 
-    private function recordFailure(DataExport $export, Throwable $e): void
+    private function recordFailure(DataExport $export, Throwable $e, FailExport $fail): void
     {
-        $export->markFailed($e instanceof ExportException ? $e->errorCode : 'export_failed');
+        $fail($export, $e instanceof ExportException ? $e->errorCode : 'export_failed');
 
         if (! $e instanceof ExportException || in_array($e->errorCode, self::REPORTED_CODES, true)) {
             report($e);

@@ -6,6 +6,7 @@ namespace Alif\Export\Services\Actions\Export;
 
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportPlan;
@@ -23,6 +24,7 @@ final readonly class StartExport
     public function __construct(
         private ExportRegistry $registry,
         private ExportBuilder $builder,
+        private FailExport $failExport,
     ) {}
 
     /**
@@ -58,7 +60,7 @@ final readonly class StartExport
             'owner_id' => $ownerId,
             'exportable' => $dto->exportable,
             'format' => $dto->format->value,
-            'status' => DataExport::STATUS_PENDING,
+            'status' => ExportStatus::PENDING,
             'options' => $dto->toArray(),
             'locale' => App::getLocale(),
         ]);
@@ -66,7 +68,7 @@ final readonly class StartExport
         try {
             RunExport::dispatch($export->id);
         } catch (Throwable $e) {
-            $export->markFailed('export_dispatch_failed');
+            ($this->failExport)($export, 'export_dispatch_failed');
 
             throw $e;
         }

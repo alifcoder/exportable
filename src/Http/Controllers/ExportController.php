@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace Alif\Export\Http\Controllers;
 
-use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Http\Requests\Export\ExportCreateRequest;
+use Alif\Export\Http\Requests\Export\ExportDefinitionRequest;
 use Alif\Export\Http\Requests\Export\ExportListRequest;
+use Alif\Export\Http\Requests\Export\ExportOwnerRequest;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
 use Alif\Export\Transformers\Export\ExportDefinitionResource;
 use Alif\Export\Transformers\Export\ExportResource;
-use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
@@ -23,12 +22,11 @@ final class ExportController extends Controller
 {
     public function __construct(private readonly ExportServiceInterface $exportService) {}
 
-    public function definition(Request $request): ExportDefinitionResource
+    public function definition(ExportDefinitionRequest $request): ExportDefinitionResource
     {
-        $key = (string) $request->query('exportable');
-        $user = $request->user() ?? throw ExportException::forbidden();
+        $key = $request->getExportableKey();
 
-        return new ExportDefinitionResource($this->exportService->definition($user, $key), $key);
+        return new ExportDefinitionResource($this->exportService->definition($request->getOwner(), $key), $key);
     }
 
     public function index(ExportListRequest $request): AnonymousResourceCollection
@@ -43,41 +41,29 @@ final class ExportController extends Controller
         return (new ExportResource($export))->response()->setStatusCode(202);
     }
 
-    public function show(Request $request, string $export): ExportResource
+    public function show(ExportOwnerRequest $request, string $export): ExportResource
     {
-        return new ExportResource($this->exportService->findOwned($this->owner($request), $export));
+        return new ExportResource($this->exportService->find($request->getOwner(), $export));
     }
 
-    public function download(Request $request, string $export): StreamedResponse
+    public function download(ExportOwnerRequest $request, string $export): StreamedResponse
     {
-        $owner = $this->owner($request);
-        $model = $this->exportService->findOwned($owner, $export);
-        $this->exportService->assertDownloadable($owner, $model);
+        $file = $this->exportService->download($request->getOwner(), $export);
 
-        return Storage::disk((string) $model->disk)->download(
-            (string) $model->path,
-            $model->file_name,
-            ['Content-Type' => $model->exportDto()->format->mimeType()],
-        );
+        return Storage::disk($file->disk)->download($file->path, $file->fileName, ['Content-Type' => $file->mimeType]);
     }
 
-    public function destroy(Request $request, string $export): Response
+    public function destroy(ExportOwnerRequest $request, string $export): Response
     {
-        $this->exportService->delete($this->exportService->findOwned($this->owner($request), $export));
+        $this->exportService->delete($request->getOwner(), $export);
 
         return response()->noContent();
     }
 
-    public function retry(Request $request, string $export): JsonResponse
+    public function retry(ExportOwnerRequest $request, string $export): JsonResponse
     {
-        $owner = $this->owner($request);
-        $new = $this->exportService->retry($owner, $this->exportService->findOwned($owner, $export));
+        $retried = $this->exportService->retry($request->getOwner(), $export);
 
-        return (new ExportResource($new))->response()->setStatusCode(202);
-    }
-
-    private function owner(Request $request): Authenticatable
-    {
-        return $request->user() ?? throw ExportException::notFound();
+        return (new ExportResource($retried))->response()->setStatusCode(202);
     }
 }
