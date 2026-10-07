@@ -23,6 +23,13 @@
       "Alif\\Export\\Tests\\": "tests/"
     }
   },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Alif\\Export\\ExportServiceProvider"
+      ]
+    }
+  },
   "config": {
     "sort-packages": true
   },
