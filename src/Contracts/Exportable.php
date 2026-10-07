@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Contracts;
 
-use Alif\Export\Column;
+use Alif\Export\Helpers\Column;
 use Alif\QueryFilter\Interfaces\EBFilterInterface;
 use Illuminate\Database\Eloquent\Builder;
 

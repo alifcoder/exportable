@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\ExportException;
-use Alif\Export\ExportWriter;
+use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportWriter;
 use Alif\Export\Tests\TestCaseWithoutDatabase;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +25,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     /** @param list<list<mixed>> $rows */
     private function csv(array $headings, array $numeric, array $rows): string
     {
-        app(ExportWriter::class)->store(ExportFormat::Csv, 't', $headings, $numeric, $rows, 'local', 'o.csv');
+        app(ExportWriter::class)->store(ExportFormat::CSV, 't', $headings, $numeric, $rows, 'local', 'o.csv');
 
         return Storage::disk('local')->get('o.csv');
     }
@@ -64,7 +64,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_returns_row_count_excluding_header(): void
     {
-        $n = app(ExportWriter::class)->store(ExportFormat::Csv, 't', ['h'], [false], [['1'], ['2'], ['3']], 'local', 'o.csv');
+        $n = app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['h'], [false], [['1'], ['2'], ['3']], 'local', 'o.csv');
 
         $this->assertSame(3, $n);
     }
@@ -103,7 +103,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     public function test_xlsx_formula_like_and_plus_text_are_string_cells(): void
     {
         app(ExportWriter::class)->store(
-            ExportFormat::Xlsx,
+            ExportFormat::XLSX,
             't',
             ['h'],
             [false],
@@ -124,7 +124,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numeric_column_stays_numeric(): void
     {
-        app(ExportWriter::class)->store(ExportFormat::Xlsx, 't', ['n'], [true], [['-5'], [12]], 'local', 'o.xlsx');
+        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [true], [['-5'], [12]], 'local', 'o.xlsx');
 
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
 
@@ -138,7 +138,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
         $disk->shouldReceive('writeStream')->andReturn(false);
         Storage::shouldReceive('disk')->with('broken')->andReturn($disk);
 
-        foreach ([ExportFormat::Csv, ExportFormat::Xlsx] as $format) {
+        foreach ([ExportFormat::CSV, ExportFormat::XLSX] as $format) {
             try {
                 app(ExportWriter::class)->store($format, 't', ['A'], [false], [['x']], 'broken', 'o.'.$format->value);
                 $this->fail("{$format->value} writer ignored a failed write");

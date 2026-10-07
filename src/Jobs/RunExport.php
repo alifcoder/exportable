@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Alif\Export\Jobs;
 
-use Alif\Export\Actions\GenerateExport;
+use Alif\Export\Entities\DataExport;
 use Alif\Export\Events\ExportFinished;
-use Alif\Export\ExportException;
-use Alif\Export\Models\DataExport;
+use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Services\Actions\Export\GenerateExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,7 +53,7 @@ final class RunExport implements ShouldQueue
         }
 
         try {
-            $export->markCompleted($generate->handle($export));
+            $export->markCompleted($generate($export));
         } catch (Throwable $e) {
             Storage::disk($disk)->delete($path);
             $this->recordFailure($export, $e);

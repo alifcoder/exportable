@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\Helpers;
 
 use Alif\Export\Contracts\Exportable;
+use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\Exceptions\ExportException;
 
-/** What one export will read and write, resolved once from the definition and the request options. */
+/** What one export will read and write, resolved once from the definition and the export DTO. */
 final readonly class ExportPlan
 {
     /**
@@ -15,23 +17,23 @@ final readonly class ExportPlan
      */
     private function __construct(
         public Exportable $exportable,
-        public ExportOptions $options,
+        public ExportCreateDTO $dto,
         public array $columns,
         public ?string $childRelation,
         public array $childColumns,
     ) {}
 
     /** @throws ExportException When a requested column is not in the definition (it changed after the request). */
-    public static function for(Exportable $exportable, ExportOptions $options): self
+    public static function for(Exportable $exportable, ExportCreateDTO $dto): self
     {
-        $childRelation = $options->includeChildren ? $exportable->childRelation() : null;
+        $childRelation = $dto->includeChildren ? $exportable->childRelation() : null;
 
         return new self(
             $exportable,
-            $options,
-            self::pick($exportable->columns(), $options->columns),
+            $dto,
+            self::pick($exportable->columns(), $dto->columns),
             $childRelation,
-            $childRelation === null ? [] : self::pick($exportable->childColumns(), $options->childColumns),
+            $childRelation === null ? [] : self::pick($exportable->childColumns(), $dto->childColumns),
         );
     }
 

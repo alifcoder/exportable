@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\Column;
 use Alif\Export\Contracts\Exportable;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\ExportBuilder;
-use Alif\Export\ExportOptions;
-use Alif\Export\ExportPlan;
+use Alif\Export\Helpers\Column;
+use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\ExportPlan;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderFilter;
@@ -23,7 +23,7 @@ final class ExportBuilderChunksTest extends TestCase
 {
     private function plan(array $parameters = []): ExportPlan
     {
-        return ExportPlan::for(new OrderExportable, new ExportOptions('orders', ExportFormat::Csv, ['number'], false, [], null, $parameters));
+        return ExportPlan::for(new OrderExportable, new ExportCreateDTO('orders', ExportFormat::CSV, ['number'], false, [], null, $parameters));
     }
 
     /** @return list<string> */
@@ -83,7 +83,7 @@ final class ExportBuilderChunksTest extends TestCase
         }
 
         $exportable = $this->exportable(fn (): Builder => Order::query()->join('order_lines', 'order_lines.order_id', '=', 'orders.id')->select('orders.*'));
-        $plan = ExportPlan::for($exportable, new ExportOptions('orders', ExportFormat::Csv, ['number'], false, [], null, ['sort' => 'number']));
+        $plan = ExportPlan::for($exportable, new ExportCreateDTO('orders', ExportFormat::CSV, ['number'], false, [], null, ['sort' => 'number']));
         $builder = new ExportBuilder;
 
         $numbers = array_map(fn (array $row): string => $row[0], iterator_to_array($builder->rows($plan, $builder->query($plan)), false));
@@ -99,7 +99,7 @@ final class ExportBuilderChunksTest extends TestCase
         OrderLine::create(['order_id' => $order->id, 'sku' => 'y']);
 
         $exportable = $this->exportable(fn (): Builder => Order::on($connection));
-        $plan = ExportPlan::for($exportable, new ExportOptions('orders', ExportFormat::Csv, ['number'], true, ['sku'], null, []));
+        $plan = ExportPlan::for($exportable, new ExportCreateDTO('orders', ExportFormat::CSV, ['number'], true, ['sku'], null, []));
         $builder = new ExportBuilder;
         $query = $builder->query($plan);
 

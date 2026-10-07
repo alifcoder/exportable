@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests;
 
-use Alif\Export\ExportServiceProvider;
+use Alif\Export\Providers\ExportServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /** For unit-level promises (writer, registry): no schema is created. */

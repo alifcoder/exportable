@@ -13,8 +13,11 @@ Async document export (csv, xlsx) for Laravel, built on `alifcoder/query-filter`
 5. Run a queue worker for the configured queue with enough memory/timeout for xlsx. The worker/connection `retry_after` must exceed `export.queue.timeout`, otherwise a slow export is redelivered while still running. Rows stuck in `processing` (started more than `queue.timeout + stale_margin_seconds` ago) or `pending` (created more than `stale_pending_hours` ago, default 24) stop counting toward the active quota and are pruned with their files; failed rows are pruned after `ttl_hours`.
 
 6. Host gotchas found integrating with a real app:
-   - `FormRequest::failOnUnknownFields()` is supported: `StoreExportRequest` opts out because `data` is validated by the host filter.
+   - `FormRequest::failOnUnknownFields()` is supported: `ExportCreateRequest` opts out because `data` is validated by the host filter.
    - Set `routes.prefix` to where your API lives (e.g. `api/v1/exports`) and `routes.middleware` to your API auth; `guard` must be the guard whose provider resolves the owner in the queue job.
+
+## Layers
+`Http/Controllers` + `Http/Requests/Export` (validate, `getDto()`) → `Services/ExportService` (`Services/Interfaces/ExportServiceInterface`) → invokable `Services/Actions/Export/{Start,Retry,Generate}Export` → `Entities/DataExport` → `Transformers/Export`. Typed data travels in `DTO/Export/{ExportCreateDTO,ExportListDTO}`; failed invariants are `Exceptions/ExportException`; `Helpers/` holds `Column`, `ExportRegistry`, `ExportPlan`, `ExportBuilder`, `ExportWriter` and the csv/xlsx writers.
 
 ## Host contracts
 - `Contracts\Exportable`: one class per document (title, columns, optional hasMany child relation and child columns, base query, `filter(array $params): EBFilterInterface`). Register them in `config/export.php` (`'exportables' => ['sale.sales' => SaleExportable::class]`) or from a service provider: `app(ExportRegistry::class)->register('sale.sales', SaleExportable::class)`.

@@ -2,27 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Actions;
+namespace Alif\Export\Services\Actions\Export;
 
-use Alif\Export\ExportBuilder;
-use Alif\Export\ExportOptions;
-use Alif\Export\ExportPlan;
-use Alif\Export\ExportRegistry;
+use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\Entities\DataExport;
+use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\ExportPlan;
+use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
-use Alif\Export\Models\DataExport;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
-final class StartExport
+final readonly class StartExport
 {
     public function __construct(
-        private readonly ExportRegistry $registry,
-        private readonly ExportBuilder $builder,
+        private ExportRegistry $registry,
+        private ExportBuilder $builder,
     ) {}
 
     /**
@@ -30,34 +30,36 @@ final class StartExport
      * quota check and the insert one step, so parallel requests cannot exceed the limit.
      *
      * @throws ValidationException When the host filter or the row cap rejects the request.
-     * @throws HttpException 429 when too many exports are active.
+     * @throws ExportException Too many active exports.
      */
-    public function handle(Authenticatable $owner, ExportOptions $options): DataExport
+    public function __invoke(Authenticatable $owner, ExportCreateDTO $dto): DataExport
     {
         $ownerId = (string) $owner->getAuthIdentifier();
 
         try {
-            return Cache::lock("export-start:{$ownerId}", 30)->block(10, fn (): DataExport => $this->start($ownerId, $options));
+            return Cache::lock("export-start:{$ownerId}", 30)->block(10, fn (): DataExport => $this->start($ownerId, $dto));
         } catch (LockTimeoutException) {
-            abort(429, 'Too many active exports.');
+            throw ExportException::tooManyActive();
         }
     }
 
-    private function start(string $ownerId, ExportOptions $options): DataExport
+    private function start(string $ownerId, ExportCreateDTO $dto): DataExport
     {
         // Cheapest check first: a rejected request must not pay for the filter and the row count.
         $active = DataExport::query()->where('owner_id', $ownerId)->active()->count();
-        abort_if($active >= (int) config('export.max_active_per_user', 3), 429, 'Too many active exports.');
+        if ($active >= (int) config('export.max_active_per_user', 3)) {
+            throw ExportException::tooManyActive();
+        }
 
-        $plan = ExportPlan::for($this->registry->get($options->exportable), $options);
+        $plan = ExportPlan::for($this->registry->get($dto->exportable), $dto);
         $this->builder->assertWithinCap($plan, $this->builder->query($plan));
 
         $export = DataExport::query()->create([
             'owner_id' => $ownerId,
-            'exportable' => $options->exportable,
-            'format' => $options->format->value,
+            'exportable' => $dto->exportable,
+            'format' => $dto->format->value,
             'status' => DataExport::STATUS_PENDING,
-            'options' => $options->toArray(),
+            'options' => $dto->toArray(),
             'locale' => App::getLocale(),
         ]);
 

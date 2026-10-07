@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\ExportRegistry;
-use Alif\Export\Http\ExportResource;
+use Alif\Export\Entities\DataExport;
+use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
-use Alif\Export\Models\DataExport;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderFilter;
 use Alif\Export\Tests\Fixtures\OrderLine;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
+use Alif\Export\Transformers\Export\ExportResource;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;

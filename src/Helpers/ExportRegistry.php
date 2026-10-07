@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\Helpers;
 
 use Alif\Export\Contracts\Exportable;
+use Alif\Export\Exceptions\ExportException;
 use Illuminate\Contracts\Container\Container;
 
 final class ExportRegistry

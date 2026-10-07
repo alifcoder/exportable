@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\Helpers;
 
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\Writers\CsvWriter;
-use Alif\Export\Writers\Writer;
-use Alif\Export\Writers\XlsxWriter;
+use Alif\Export\Helpers\Writers\CsvWriter;
+use Alif\Export\Helpers\Writers\Writer;
+use Alif\Export\Helpers\Writers\XlsxWriter;
 
 final class ExportWriter
 {
@@ -32,8 +32,8 @@ final class ExportWriter
     private function writer(ExportFormat $format): Writer
     {
         return match ($format) {
-            ExportFormat::Csv => new CsvWriter,
-            ExportFormat::Xlsx => new XlsxWriter,
+            ExportFormat::CSV => new CsvWriter,
+            ExportFormat::XLSX => new XlsxWriter,
         };
     }
 }

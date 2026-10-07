@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\Helpers;
 
+use Alif\Export\Exceptions\ExportException;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Closure;
@@ -21,7 +22,7 @@ final class ExportBuilder
     {
         $builder = $plan->exportable->query();
         $this->assertChildRelation($plan, $builder);
-        $plan->exportable->filter($plan->options->parameters)->apply($builder);
+        $plan->exportable->filter($plan->dto->parameters)->apply($builder);
 
         $builder->setEagerLoads([]);
         $builder->with($this->eagerLoads($plan));
@@ -33,7 +34,7 @@ final class ExportBuilder
     /** @throws ValidationException */
     public function assertWithinCap(ExportPlan $plan, Builder $query): void
     {
-        $cap = $plan->options->format->maxRows();
+        $cap = $plan->dto->format->maxRows();
 
         // With children the output row count is at least the document count, so one count query covers both.
         $exceeds = $plan->childRelation === null
@@ -42,7 +43,7 @@ final class ExportBuilder
 
         if ($exceeds) {
             throw ValidationException::withMessages([
-                'file.format' => [sprintf('Too many rows for %s export (maximum %d).', $plan->options->format->value, $cap)],
+                'file.format' => [sprintf('Too many rows for %s export (maximum %d).', $plan->dto->format->value, $cap)],
             ]);
         }
     }
@@ -54,7 +55,7 @@ final class ExportBuilder
      */
     public function rows(ExportPlan $plan, Builder $query): Generator
     {
-        $cap = $plan->options->format->maxRows();
+        $cap = $plan->dto->format->maxRows();
         $blankChild = array_fill(0, count($plan->childColumns), null);
         $emitted = 0;
 

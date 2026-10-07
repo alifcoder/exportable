@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Models;
+namespace Alif\Export\Entities;
 
-use Alif\Export\ExportOptions;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -65,9 +65,9 @@ class DataExport extends Model
         ];
     }
 
-    public function exportOptions(): ExportOptions
+    public function exportDto(): ExportCreateDTO
     {
-        return ExportOptions::fromArray($this->options);
+        return ExportCreateDTO::fromArray($this->options);
     }
 
     public function isExpired(): bool
@@ -111,12 +111,12 @@ class DataExport extends Model
 
     public function markCompleted(int $rows): void
     {
-        $options = $this->exportOptions();
-        $slug = Str::slug($options->title ?? $options->exportable, '_') ?: 'export';
+        $dto = $this->exportDto();
+        $slug = Str::slug($dto->title ?? $dto->exportable, '_') ?: 'export';
 
         $this->update([
             'status' => self::STATUS_COMPLETED,
-            'file_name' => sprintf('%s_%s.%s', $slug, now()->format('Y-m-d_His'), $options->format->extension()),
+            'file_name' => sprintf('%s_%s.%s', $slug, now()->format('Y-m-d_His'), $dto->format->extension()),
             'rows_count' => $rows,
             'finished_at' => now(),
             'expires_at' => now()->addHours((int) config('export.ttl_hours', 24)),

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Unit;
 
-use Alif\Export\ExportException;
-use Alif\Export\ExportRegistry;
+use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\PlainOrderExportable;
 use Alif\Export\Tests\TestCaseWithoutDatabase;

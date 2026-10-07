@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Contracts;
 
-use Alif\Export\ExportException;
+use Alif\Export\Exceptions\ExportException;
 use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
 

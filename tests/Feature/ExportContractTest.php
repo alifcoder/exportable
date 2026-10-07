@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\ExportRegistry;
-use Alif\Export\Models\DataExport;
+use Alif\Export\Entities\DataExport;
+use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderFilter;

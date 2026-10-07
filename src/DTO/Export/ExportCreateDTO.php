@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Enums\ExportFormat;
 
-final readonly class ExportOptions
+final readonly class ExportCreateDTO
 {
     /**
      * @param  list<string>  $columns

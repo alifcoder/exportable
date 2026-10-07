@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Writers;
+namespace Alif\Export\Helpers\Writers;
 
 interface Writer
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Writers;
+namespace Alif\Export\Helpers\Writers;
 
-use Alif\Export\ExportException;
+use Alif\Export\Exceptions\ExportException;
 use Illuminate\Support\Facades\Storage;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;

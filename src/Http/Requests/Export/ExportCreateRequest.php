@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Http;
+namespace Alif\Export\Http\Requests\Export;
 
 use Alif\Export\Contracts\Exportable;
 use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\ExportOptions;
-use Alif\Export\ExportRegistry;
+use Alif\Export\Helpers\ExportRegistry;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Http\Attributes\FailOnUnknownFields;
 use Illuminate\Foundation\Http\FormRequest;
@@ -20,7 +20,7 @@ use Illuminate\Validation\Rule;
  * FormRequest::failOnUnknownFields() globally must not reject those nested keys.
  */
 #[FailOnUnknownFields(false)]
-final class StoreExportRequest extends FormRequest
+final class ExportCreateRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -68,12 +68,12 @@ final class StoreExportRequest extends FormRequest
         return (string) $this->input('exportable');
     }
 
-    public function toOptions(): ExportOptions
+    public function getDto(): ExportCreateDTO
     {
         $file = (array) $this->input('file');
         $includeChildren = (bool) ($file['include_children'] ?? false);
 
-        return new ExportOptions(
+        return new ExportCreateDTO(
             exportable: $this->exportableKey(),
             format: ExportFormat::from($file['format']),
             columns: array_values($file['columns']),

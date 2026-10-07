@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking: restructured into layers following erp-backend. Namespaces moved: `Column`, `ExportRegistry`, `ExportBuilder`, `ExportPlan`, `ExportWriter`, `Writers\*` → `Helpers\*`; `Models\DataExport` → `Entities\DataExport`; `ExportException` → `Exceptions\ExportException`; `ExportOptions` → `DTO\Export\ExportCreateDTO`; `ExportServiceProvider` → `Providers\ExportServiceProvider`; `Http\ExportResource` → `Transformers\Export\ExportResource`; `Actions\*` → `Services\Actions\Export\*` (invokable: `$action(...)` instead of `->handle(...)`). `DataExport::exportOptions()` is now `exportDto()`. `ExportFormat` cases are now `CSV` / `XLSX`. Hosts that only register exportables, `Exportable` / `ExportAuth` implementations and `ExportFinished` listeners must update the `Column`, `ExportRegistry` and `DataExport` imports.
+- Controller → `ExportServiceInterface` (bound in the provider) → Actions. Services throw `ExportException` (403/404/409/410/429 via `httpStatus()`), not HTTP aborts; HTTP responses and status codes are unchanged.
 - Breaking: the `pdf` format is removed (csv and xlsx only), together with the `barryvdh/laravel-dompdf` dependency, the `export::pdf` view and `export.max_rows.pdf`. The migration stub's `format` check is now `('csv','xlsx')`; an existing Postgres table keeps the old constraint, which is harmless. Old rows with format `pdf` can no longer be created, so delete them.
 - Fix: a storage disk that returns `false` on write (no `throw`) no longer yields a `completed` export without a file; it fails with `storage_write_failed`.
 - Fix: the submit-time row count uses the exportable model's connection, not the default one.

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Alif\Export\Http\ExportController;
+use Alif\Export\Http\Controllers\ExportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('definition', [ExportController::class, 'definition'])->name('export.definition');

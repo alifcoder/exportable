@@ -6,8 +6,8 @@ namespace Alif\Export\Enums;
 
 enum ExportFormat: string
 {
-    case Csv = 'csv';
-    case Xlsx = 'xlsx';
+    case CSV = 'csv';
+    case XLSX = 'xlsx';
 
     public function extension(): string
     {
@@ -22,8 +22,8 @@ enum ExportFormat: string
     public function mimeType(): string
     {
         return match ($this) {
-            self::Csv => 'text/csv',
-            self::Xlsx => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            self::CSV => 'text/csv',
+            self::XLSX => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         };
     }
 }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Fixtures;
 
-use Alif\Export\Column;
 use Alif\Export\Contracts\Exportable;
+use Alif\Export\Helpers\Column;
 use Alif\QueryFilter\Interfaces\EBFilterInterface;
 use Illuminate\Database\Eloquent\Builder;
 

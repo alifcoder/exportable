@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\Actions\GenerateExport;
+use Alif\Export\Entities\DataExport;
 use Alif\Export\Events\ExportFinished;
-use Alif\Export\ExportRegistry;
+use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
-use Alif\Export\Models\DataExport;
+use Alif\Export\Services\Actions\Export\GenerateExport;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderLine;

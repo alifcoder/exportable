@@ -2,27 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Actions;
+namespace Alif\Export\Services\Actions\Export;
 
 use Alif\Export\Contracts\ExportAuth;
-use Alif\Export\ExportBuilder;
-use Alif\Export\ExportException;
-use Alif\Export\ExportPlan;
-use Alif\Export\ExportRegistry;
-use Alif\Export\ExportWriter;
-use Alif\Export\Models\DataExport;
+use Alif\Export\Entities\DataExport;
+use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\ExportPlan;
+use Alif\Export\Helpers\ExportRegistry;
+use Alif\Export\Helpers\ExportWriter;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 
 /** Writes the file of a claimed export, signed in as its owner so the host filter's scope applies. */
-final class GenerateExport
+final readonly class GenerateExport
 {
     public function __construct(
-        private readonly ExportAuth $auth,
-        private readonly ExportRegistry $registry,
-        private readonly ExportBuilder $builder,
-        private readonly ExportWriter $writer,
+        private ExportAuth $auth,
+        private ExportRegistry $registry,
+        private ExportBuilder $builder,
+        private ExportWriter $writer,
     ) {}
 
     /**
@@ -30,7 +30,7 @@ final class GenerateExport
      *
      * @throws ExportException
      */
-    public function handle(DataExport $export): int
+    public function __invoke(DataExport $export): int
     {
         $previousLocale = App::getLocale();
         App::setLocale($export->locale);
@@ -47,21 +47,21 @@ final class GenerateExport
 
     private function write(DataExport $export, Authenticatable $owner): int
     {
-        $options = $export->exportOptions();
+        $dto = $export->exportDto();
 
-        if (! $this->auth->allows($owner, $options->exportable)) {
+        if (! $this->auth->allows($owner, $dto->exportable)) {
             throw ExportException::forbidden();
         }
 
-        $exportable = $this->registry->get($options->exportable);
-        $plan = ExportPlan::for($exportable, $options);
+        $exportable = $this->registry->get($dto->exportable);
+        $plan = ExportPlan::for($exportable, $dto);
         $previous = Model::preventsLazyLoading();
         Model::preventLazyLoading();
 
         try {
             return $this->writer->store(
-                $options->format,
-                $options->title ?? (string) __($exportable->title()),
+                $dto->format,
+                $dto->title ?? (string) __($exportable->title()),
                 $plan->headings(),
                 $plan->numeric(),
                 $this->builder->rows($plan, $this->builder->query($plan)),

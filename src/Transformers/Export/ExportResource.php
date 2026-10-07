@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Http;
+namespace Alif\Export\Transformers\Export;
 
-use Alif\Export\Models\DataExport;
+use Alif\Export\Entities\DataExport;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

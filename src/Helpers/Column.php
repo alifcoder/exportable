@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export;
+namespace Alif\Export\Helpers;
 
 use Closure;
 use Illuminate\Database\Eloquent\Model;

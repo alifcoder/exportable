@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\ExportWriter;
+use Alif\Export\Helpers\ExportWriter;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -18,7 +18,7 @@ final class XlsxPrecisionTest extends TestCase
         Storage::fake('local');
 
         app(ExportWriter::class)->store(
-            ExportFormat::Xlsx,
+            ExportFormat::XLSX,
             't',
             ['id', 'qty'],
             [false, true],
