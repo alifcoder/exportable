@@ -1,0 +1,41 @@
+{
+  "name": "alifcoder/export-sdk",
+  "description": "Async document export (csv/xlsx/pdf) for Laravel",
+  "type": "library",
+  "license": "proprietary",
+  "require": {
+    "php": "^8.3",
+    "illuminate/support": "^13.0"
+  },
+  "require-dev": {
+    "larastan/larastan": "^3.12",
+    "laravel/pint": "^1.32",
+    "orchestra/testbench": "^11.0",
+    "phpunit/phpunit": "^12.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Alif\\Export\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Alif\\Export\\Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "scripts": {
+    "lint": "pint --test",
+    "analyse": "phpstan analyse --memory-limit=2G",
+    "test": "phpunit",
+    "check": [
+      "@lint",
+      "@analyse",
+      "@test"
+    ]
+  }
+}
