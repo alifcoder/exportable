@@ -16,6 +16,7 @@ use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderLine;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -205,6 +206,23 @@ final class ExportManagementTest extends TestCase
 
         Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $ok && $e->export->status === 'completed');
         Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->id === $bad && $e->export->status === 'failed');
+    }
+
+    // ---- host with failOnUnknownFields ------------------------------------------------
+
+    public function test_nested_filter_data_is_accepted_when_the_host_fails_on_unknown_fields(): void
+    {
+        FormRequest::failOnUnknownFields();
+        $this->beforeApplicationDestroyed(fn () => FormRequest::failOnUnknownFields(false));
+        Order::create(['number' => 'A', 'total' => '1']);
+        Order::create(['number' => 'B', 'total' => '9']);
+
+        $response = $this->actingAs($this->user)->postJson('/exports', $this->payload() + [
+            'data' => ['filter' => ['total' => ['gte' => 5]], 'sort' => '-number'],
+        ]);
+
+        $response->assertStatus(202);
+        $this->assertSame(1, DataExport::findOrFail($response->json('data.id'))->rows_count);
     }
 
     // ---- real file contents ----------------------------------------------------------

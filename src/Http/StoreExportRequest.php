@@ -10,10 +10,16 @@ use Alif\Export\Enums\ExportFormat;
 use Alif\Export\ExportOptions;
 use Alif\Export\ExportRegistry;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Foundation\Http\Attributes\FailOnUnknownFields;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 
+/**
+ * `data` is validated by the host filter (fields, operators, operands), not here. A host that enables
+ * FormRequest::failOnUnknownFields() globally must not reject those nested keys.
+ */
+#[FailOnUnknownFields(false)]
 final class StoreExportRequest extends FormRequest
 {
     public function authorize(): bool

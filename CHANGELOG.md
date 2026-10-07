@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Fix: `POST {prefix}` rejected `data.*` (filter, sort, search) with 422 "prohibited" in hosts that enable `FormRequest::failOnUnknownFields()`.
+- Docs: host integration gotchas.
+
 ## 0.1.0
 
 - Async document export (csv, xlsx, pdf) on `alifcoder/query-filter`.

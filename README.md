@@ -12,6 +12,11 @@ Async document export (csv, xlsx, pdf) for Laravel, built on `alifcoder/query-fi
 4. Define the Gate ability (`export.ability`, default `data-export`): `Gate::define('data-export', fn ($user, string $key) => ...)`, or bind your own `Alif\Export\Contracts\ExportAuth`.
 5. Run a queue worker for the configured queue with enough memory/timeout for xlsx and pdf. The worker/connection `retry_after` must exceed `export.queue.timeout`, otherwise a slow export is redelivered while still running. Rows stuck in `processing` (started more than `queue.timeout + stale_margin_seconds` ago) or `pending` (created more than `stale_pending_hours` ago, default 24) stop counting toward the active quota and are pruned with their files; failed rows are pruned after `ttl_hours`.
 
+6. Host gotchas found integrating with a real app:
+   - A host that forces a UUID pattern on **every** route parameter (e.g. a `RouteServiceProvider` loop calling `$route->where($param, $uuid)`) must exempt `exportable`, otherwise `GET {prefix}/exportables/{key}` is a 404 (keys look like `sale.sales`).
+   - `FormRequest::failOnUnknownFields()` is supported: `StoreExportRequest` opts out because `data` is validated by the host filter.
+   - Set `routes.prefix` to where your API lives (e.g. `api/v1/exports`) and `routes.middleware` to your API auth; `guard` must be the guard whose provider resolves the owner in the queue job.
+
 ## Host contracts
 - `Contracts\Exportable`: one class per document (title, columns, optional hasMany child relation and child columns, base query, `filter(array $params): EBFilterInterface`). Register in a service provider: `app(ExportRegistry::class)->register('sale.sales', SaleExportable::class)`.
 - `Contracts\ExportAuth`: `allows($user, $key)` and `actingAs($ownerId, Closure)`. Default `LaravelExportAuth` uses the Gate and the guard's user provider.
