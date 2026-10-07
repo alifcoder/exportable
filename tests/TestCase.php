@@ -50,13 +50,13 @@ abstract class TestCase extends Orchestra
         });
         Schema::create('order_lines', function ($t): void {
             $t->uuid('id')->primary();
-            $t->uuid('order_id');
+            $t->uuid('order_id')->index();
             $t->string('sku');
             $t->integer('qty')->default(1);
             $t->timestamps();
         });
 
-        $migration = include __DIR__ . '/../database/migrations/create_data_exports_table.php.stub';
+        $migration = include __DIR__.'/../database/migrations/create_data_exports_table.php.stub';
         $migration->up();
     }
 }

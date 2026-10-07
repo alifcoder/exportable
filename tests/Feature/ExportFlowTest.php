@@ -67,7 +67,7 @@ final class ExportFlowTest extends TestCase
         $response = $this->actingAs($this->user)->postJson('/exports', $this->payload(true));
         $response->assertStatus(202);
 
-        $show = $this->actingAs($this->user)->getJson('/exports/' . $response->json('data.id'));
+        $show = $this->actingAs($this->user)->getJson('/exports/'.$response->json('data.id'));
         $show->assertOk()->assertJsonPath('data.status', 'completed')->assertJsonPath('data.rows_count', 4);
 
         $download = $this->actingAs($this->user)->get($show->json('data.download_url'));
@@ -120,7 +120,7 @@ final class ExportFlowTest extends TestCase
             $id = $this->actingAs($this->user)->postJson('/exports', $payload)->json('data.id');
             $export = DataExport::findOrFail($id);
 
-            $this->assertSame('completed', $export->status, $format . ' ' . $export->error_code);
+            $this->assertSame('completed', $export->status, $format.' '.$export->error_code);
             Storage::disk('local')->assertExists($export->path);
         }
     }
@@ -148,16 +148,20 @@ final class ExportFlowTest extends TestCase
         $this->assertSame('failed', DataExport::findOrFail($id)->status);
     }
 
-    public function test_row_cap_is_enforced_at_submit_and_in_the_job(): void
+    public function test_row_cap_counts_flattened_output_rows_at_submit(): void
     {
         config(['export.max_rows.csv' => 1]);
         $this->actingAs($this->user)->postJson('/exports', $this->payload(false))
             ->assertStatus(422)->assertJsonValidationErrors(['file.format']);
 
+        // 4 flattened output rows exceed the cap although there are fewer documents.
         config(['export.max_rows.csv' => 3]);
-        $id = $this->actingAs($this->user)->postJson('/exports', $this->payload(true))->json('data.id');
-        $this->assertSame('row_limit_exceeded', DataExport::findOrFail($id)->error_code);
-        $this->assertSame([], Storage::disk('local')->allFiles('exports'));
+        $this->actingAs($this->user)->postJson('/exports', $this->payload(true))
+            ->assertStatus(422)->assertJsonValidationErrors(['file.format']);
+        $this->assertSame(0, DataExport::query()->count());
+
+        config(['export.max_rows.csv' => 4]);
+        $this->actingAs($this->user)->postJson('/exports', $this->payload(true))->assertStatus(202);
     }
 
     public function test_active_export_limit_returns_429(): void

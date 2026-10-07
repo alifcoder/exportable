@@ -274,9 +274,9 @@ final class ExportContractTest extends TestCase
         $few = $measure();
 
         for ($i = 0; $i < 28; $i++) {
-            $o = Order::create(['number' => 'N-' . $i, 'total' => '1']);
-            OrderLine::create(['order_id' => $o->id, 'sku' => 'x' . $i, 'qty' => 1]);
-            OrderLine::create(['order_id' => $o->id, 'sku' => 'y' . $i, 'qty' => 1]);
+            $o = Order::create(['number' => 'N-'.$i, 'total' => '1']);
+            OrderLine::create(['order_id' => $o->id, 'sku' => 'x'.$i, 'qty' => 1]);
+            OrderLine::create(['order_id' => $o->id, 'sku' => 'y'.$i, 'qty' => 1]);
         }
         $many = $measure();
 
@@ -357,7 +357,7 @@ final class ExportContractTest extends TestCase
             $disposition = (string) $response->headers->get('content-disposition');
 
             $this->assertStringStartsWith('attachment', $disposition);
-            $this->assertMatchesRegularExpression('/filename=orders_\d{4}-\d{2}-\d{2}_\d{6}\.' . $format . '/', $disposition);
+            $this->assertMatchesRegularExpression('/filename=orders_\d{4}-\d{2}-\d{2}_\d{6}\.'.$format.'/', $disposition);
             $this->assertStringContainsString($mime, (string) $response->headers->get('content-type'));
         }
     }

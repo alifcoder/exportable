@@ -28,8 +28,13 @@ final class StartExport
      */
     public function handle(Authenticatable $owner, ExportOptions $options): DataExport
     {
-        $query = $this->builder->query($this->registry->get($options->exportable), $options);
-        $this->builder->assertWithinCap($query, $options->format);
+        $exportable = $this->registry->get($options->exportable);
+        $query = $this->builder->query($exportable, $options);
+        $this->builder->assertWithinCap(
+            $query,
+            $options->format,
+            $options->includeChildren ? $exportable->childRelation() : null,
+        );
 
         $ownerId = (string) $owner->getAuthIdentifier();
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Jobs;
 
 use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\Events\ExportFinished;
 use Alif\Export\ExportBuilder;
 use Alif\Export\ExportException;
 use Alif\Export\ExportRegistry;
@@ -106,6 +107,7 @@ final class RunExport implements ShouldQueue
                 'finished_at' => now(),
                 'expires_at' => now()->addHours((int) config('export.ttl_hours', 24)),
             ]);
+            ExportFinished::dispatch($export);
         } catch (Throwable $e) {
             Storage::disk($disk)->delete($path);
             $this->markFailed($export, $e);
@@ -134,6 +136,7 @@ final class RunExport implements ShouldQueue
             'error_code' => $e instanceof ExportException ? $e->errorCode : 'export_failed',
             'finished_at' => now(),
         ]);
+        ExportFinished::dispatch($export);
     }
 
     private function fileName(DataExport $export): string

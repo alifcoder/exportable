@@ -13,6 +13,8 @@ use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class ExportBuilder
@@ -32,15 +34,33 @@ final class ExportBuilder
     }
 
     /** @throws ValidationException */
-    public function assertWithinCap(Builder $query, ExportFormat $format): void
+    public function assertWithinCap(Builder $query, ExportFormat $format, ?string $childRelation = null): void
     {
         $cap = $format->maxRows();
 
-        if ((clone $query)->reorder()->offset($cap)->limit(1)->exists()) {
+        if ((clone $query)->reorder()->offset($cap)->limit(1)->exists()
+            || ($childRelation !== null && $this->outputRows($query, $childRelation) > $cap)) {
             throw ValidationException::withMessages([
                 'file.format' => [sprintf('Too many rows for %s export (maximum %d).', $format->value, $cap)],
             ]);
         }
+    }
+
+    /** Output rows when children are flattened: one per child, or one for a childless document. */
+    private function outputRows(Builder $query, string $childRelation): int
+    {
+        $alias = Str::snake($childRelation).'_count';
+        $counted = (clone $query)
+            ->reorder()
+            ->setEagerLoads([])
+            ->select($query->getModel()->getQualifiedKeyName())
+            ->withCount($childRelation)
+            ->toBase();
+
+        return (int) DB::query()
+            ->fromSub($counted, 'counted')
+            ->selectRaw(sprintf('coalesce(sum(case when %1$s > 0 then %1$s else 1 end), 0) as total', $alias))
+            ->value('total');
     }
 
     /** @return list<string> */
