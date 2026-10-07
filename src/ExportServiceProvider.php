@@ -31,8 +31,6 @@ final class ExportServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadViewsFrom(__DIR__.'/../resources/views', 'export');
-
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/export.php' => config_path('export.php')], 'export-config');
             $this->publishes([

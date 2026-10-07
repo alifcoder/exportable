@@ -6,7 +6,6 @@ namespace Alif\Export\Tests;
 
 use Alif\Export\ExportServiceProvider;
 use Alif\Export\Tests\Fixtures\User;
-use Barryvdh\DomPDF\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -14,7 +13,7 @@ abstract class TestCase extends Orchestra
 {
     protected function getPackageProviders($app): array
     {
-        return [ExportServiceProvider::class, ServiceProvider::class];
+        return [ExportServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void

@@ -19,7 +19,7 @@ use PHPUnit\Framework\Attributes\Group;
 /**
  * Not part of the default run. Execute with:
  *   STRESS_ROWS=50000 STRESS_MEMORY_MB=512 vendor/bin/phpunit --group stress
- * STRESS_ROWS is the number of documents (2 child lines each) for xlsx, STRESS_CSV_ROWS for csv, STRESS_PDF_ROWS for pdf.
+ * STRESS_ROWS is the number of documents (2 child lines each) for xlsx, STRESS_CSV_ROWS for csv.
  * Add TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=55432 to run on Postgres instead of in-memory sqlite.
  * Uses the fake local disk, so it measures the SDK and the chosen database, not real storage.
  */
@@ -29,14 +29,13 @@ final class ExportStressTest extends TestCase
     /** @return array<string, array{string}> */
     public static function formats(): array
     {
-        return ['csv' => ['csv'], 'xlsx' => ['xlsx'], 'pdf' => ['pdf']];
+        return ['csv' => ['csv'], 'xlsx' => ['xlsx']];
     }
 
     #[DataProvider('formats')]
     public function test_export_stays_within_time_and_memory_budget(string $format): void
     {
         $documents = match ($format) {
-            'pdf' => (int) (getenv('STRESS_PDF_ROWS') ?: 1000),
             'csv' => (int) (getenv('STRESS_CSV_ROWS') ?: getenv('STRESS_ROWS') ?: 25000),
             default => (int) (getenv('STRESS_ROWS') ?: 25000),
         };
@@ -45,7 +44,7 @@ final class ExportStressTest extends TestCase
         Storage::fake('local');
         app(ExportRegistry::class)->register('orders', OrderExportable::class);
         Gate::define('data-export', fn (): bool => true);
-        config(['export.max_rows.csv' => PHP_INT_MAX, 'export.max_rows.xlsx' => PHP_INT_MAX, 'export.max_rows.pdf' => PHP_INT_MAX]);
+        config(['export.max_rows.csv' => PHP_INT_MAX, 'export.max_rows.xlsx' => PHP_INT_MAX]);
         $user = User::create(['name' => 'u']);
 
         $this->seedOrders($documents);

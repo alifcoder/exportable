@@ -43,6 +43,11 @@ final class ExportException extends RuntimeException
         return new self('The export owner could not be resolved.', 'owner_missing');
     }
 
+    public static function storageWriteFailed(string $disk, string $path): self
+    {
+        return new self(sprintf('Could not write the export file "%s" to disk "%s".', $path, $disk), 'storage_write_failed');
+    }
+
     public static function invalidColumnValue(string $key): self
     {
         return new self(sprintf('Column "%s" produced a non-scalar value.', $key), 'invalid_column_value');

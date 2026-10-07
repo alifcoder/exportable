@@ -11,7 +11,6 @@ use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -59,7 +58,7 @@ final class ExportBuilder
         $blankChild = array_fill(0, count($plan->childColumns), null);
         $emitted = 0;
 
-        foreach ($query->lazy((int) config('export.chunk_size', 500)) as $row) {
+        foreach ($this->chunks($query) as $row) {
             // Eloquent only arms the guard for result sets with more than one model; arm it for every row.
             $row->preventsLazyLoading = Model::preventsLazyLoading();
             $base = $this->values($plan->columns, $row);
@@ -70,6 +69,39 @@ final class ExportBuilder
                 }
 
                 yield $line;
+            }
+        }
+    }
+
+    /**
+     * Snapshot the ordered keys first, then load the models by key. Offset paging would skip or repeat rows when
+     * data changes during a long export; this keeps the filter's sort and a stable set. Rows deleted meanwhile
+     * are skipped. Only keys are held in memory (bounded by the format's row cap); the filter's limit/offset
+     * applies to the key snapshot, and duplicate keys from joins are collapsed.
+     *
+     * @param  Builder<Model>  $query
+     * @return Generator<int, Model>
+     */
+    private function chunks(Builder $query): Generator
+    {
+        $keyName = $query->getModel()->getKeyName();
+        $keys = [];
+
+        foreach ((clone $query)->setEagerLoads([])->select($query->getModel()->getQualifiedKeyName())->toBase()->cursor() as $record) {
+            $keys[(string) $record->{$keyName}] ??= $record->{$keyName};
+        }
+
+        foreach (array_chunk(array_values($keys), max(1, (int) config('export.chunk_size', 500))) as $chunk) {
+            $load = (clone $query)->reorder()->whereKey($chunk);
+            // The snapshot already applied the filter's window; paging it again would truncate the chunk.
+            $load->getQuery()->limit = null;
+            $load->getQuery()->offset = null;
+            $models = $load->get()->keyBy(fn (Model $m): string => (string) $m->getKey());
+
+            foreach ($chunk as $key) {
+                if (($model = $models->get((string) $key)) !== null) {
+                    yield $model;
+                }
             }
         }
     }
@@ -111,7 +143,7 @@ final class ExportBuilder
             ->withCount($childRelation)
             ->toBase();
 
-        return (int) DB::query()
+        return (int) $query->getModel()->getConnection()->query()
             ->fromSub($counted, 'counted')
             ->selectRaw(sprintf('coalesce(sum(case when %1$s > 0 then %1$s else 1 end), 0) as total', $alias))
             ->value('total');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Writers;
 
+use Alif\Export\ExportException;
 use Illuminate\Support\Facades\Storage;
 
 final class CsvWriter implements Writer
@@ -16,17 +17,23 @@ final class CsvWriter implements Writer
         fwrite($temp, "\xEF\xBB\xBF");
         fputcsv($temp, $headings, ',', '"', '');
 
-        $count = 0;
-        foreach ($rows as $row) {
-            fputcsv($temp, $this->guard($row, $numeric), ',', '"', '');
-            $count++;
+        try {
+            $count = 0;
+            foreach ($rows as $row) {
+                fputcsv($temp, $this->guard($row, $numeric), ',', '"', '');
+                $count++;
+            }
+
+            rewind($temp);
+
+            if (! Storage::disk($disk)->writeStream($path, $temp)) {
+                throw ExportException::storageWriteFailed($disk, $path);
+            }
+
+            return $count;
+        } finally {
+            fclose($temp);
         }
-
-        rewind($temp);
-        Storage::disk($disk)->writeStream($path, $temp);
-        fclose($temp);
-
-        return $count;
     }
 
     /**

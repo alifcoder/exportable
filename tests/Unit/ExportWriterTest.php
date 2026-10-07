@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\Enums\ExportFormat;
+use Alif\Export\ExportException;
 use Alif\Export\ExportWriter;
 use Alif\Export\Tests\TestCaseWithoutDatabase;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -130,44 +132,19 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
         $this->assertEquals(-5, $sheet->getCell('A2')->getValue());
     }
 
-    public function test_pdf_file_starts_with_pdf_magic(): void
+    public function test_failed_disk_write_throws_instead_of_reporting_success(): void
     {
-        $n = app(ExportWriter::class)->store(ExportFormat::Pdf, 'Title', ['h'], [false], [['a'], ['b']], 'local', 'o.pdf');
+        $disk = \Mockery::mock(Filesystem::class);
+        $disk->shouldReceive('writeStream')->andReturn(false);
+        Storage::shouldReceive('disk')->with('broken')->andReturn($disk);
 
-        $this->assertSame(2, $n);
-        $this->assertStringStartsWith('%PDF', Storage::disk('local')->get('o.pdf'));
-    }
-
-    /** Plan: "A PDF containing <img src=http://...> or <script> text renders it escaped." */
-    public function test_pdf_view_escapes_html_in_cells_headings_and_title(): void
-    {
-        $evil = '<img src="http://evil.example/x.png">';
-        $html = view('export::pdf', [
-            'title' => '<script>alert(1)</script>',
-            'headings' => ['<b>H</b>'],
-            'numeric' => [false],
-            'rows' => [[$evil], ['<script>steal()</script>']],
-        ])->render();
-
-        $this->assertStringNotContainsString('<img', $html);
-        $this->assertStringNotContainsString('<script', $html);
-        $this->assertStringNotContainsString('<b>H', $html);
-        $this->assertStringContainsString('&lt;img', $html);
-        $this->assertStringContainsString('&lt;script&gt;', $html);
-    }
-
-    public function test_pdf_with_hostile_content_is_still_produced(): void
-    {
-        app(ExportWriter::class)->store(
-            ExportFormat::Pdf,
-            '<script>x</script>',
-            ['h'],
-            [false],
-            [['<img src="http://127.0.0.1:1/evil">'], ['<script>alert(1)</script>']],
-            'local',
-            'o.pdf',
-        );
-
-        $this->assertStringStartsWith('%PDF', Storage::disk('local')->get('o.pdf'));
+        foreach ([ExportFormat::Csv, ExportFormat::Xlsx] as $format) {
+            try {
+                app(ExportWriter::class)->store($format, 't', ['A'], [false], [['x']], 'broken', 'o.'.$format->value);
+                $this->fail("{$format->value} writer ignored a failed write");
+            } catch (ExportException $e) {
+                $this->assertSame('storage_write_failed', $e->errorCode);
+            }
+        }
     }
 }

@@ -30,8 +30,11 @@ final class ExportController extends Controller
     {
         $key = (string) $request->query('exportable');
 
-        abort_unless($this->registry->has($key), 404);
-        abort_unless($request->user() !== null && $this->auth->allows($request->user(), $key), 403);
+        // Unknown and forbidden answer alike, so the endpoint does not reveal which keys exist.
+        abort_unless(
+            $request->user() !== null && $this->registry->has($key) && $this->auth->allows($request->user(), $key),
+            403,
+        );
 
         $definition = $this->registry->get($key);
         $labels = fn (array $columns): array => collect($columns)

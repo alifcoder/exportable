@@ -96,6 +96,7 @@ final class ExportFlowTest extends TestCase
 
     public function test_unknown_column_and_prohibited_param_are_rejected(): void
     {
+        config()->set('export.prohibited_parameters', ['all']);
         $bad = $this->payload(false);
         $bad['file']['columns'] = ['nope'];
         $bad['all'] = true;
@@ -112,9 +113,9 @@ final class ExportFlowTest extends TestCase
         $this->actingAs($other)->getJson("/exports/{$id}")->assertNotFound();
     }
 
-    public function test_xlsx_and_pdf_are_written(): void
+    public function test_xlsx_is_written(): void
     {
-        foreach (['xlsx', 'pdf'] as $format) {
+        foreach (['xlsx'] as $format) {
             $payload = $this->payload(true);
             $payload['file']['format'] = $format;
             $id = $this->actingAs($this->user)->postJson('/exports', $payload)->json('data.id');

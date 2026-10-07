@@ -42,7 +42,7 @@ return new class extends Migration
         });
 
         if (DB::getDriverName() === 'pgsql') {
-            DB::statement("ALTER TABLE \"{$table}\" ADD CONSTRAINT {$table}_format_check CHECK (format IN ('csv','xlsx','pdf'))");
+            DB::statement("ALTER TABLE \"{$table}\" ADD CONSTRAINT {$table}_format_check CHECK (format IN ('csv','xlsx'))");
             DB::statement("ALTER TABLE \"{$table}\" ADD CONSTRAINT {$table}_status_check CHECK (status IN ('pending','processing','completed','failed'))");
         }
     }

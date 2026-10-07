@@ -83,7 +83,7 @@ final class InfraTest extends TestCase
     {
         config(['export.disk' => 's3test']);
 
-        foreach (['csv', 'xlsx', 'pdf'] as $format) {
+        foreach (['csv', 'xlsx'] as $format) {
             $id = $this->actingAs($this->user)->postJson('/exports', $this->payload($format))->assertStatus(202)->json('data.id');
             $export = DataExport::findOrFail($id);
 
@@ -98,9 +98,6 @@ final class InfraTest extends TestCase
             if ($format === 'csv') {
                 $this->assertStringContainsString('Number,Total', $body);
                 $this->assertStringContainsString('A-1', $body);
-            }
-            if ($format === 'pdf') {
-                $this->assertStringStartsWith('%PDF', $body);
             }
             if ($format === 'xlsx') {
                 $this->assertStringStartsWith('PK', $body);

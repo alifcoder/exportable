@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Writers;
 
+use Alif\Export\ExportException;
 use Illuminate\Support\Facades\Storage;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
@@ -34,8 +35,18 @@ final class XlsxWriter implements Writer
             $writer->close();
 
             $stream = fopen($temp, 'rb');
-            Storage::disk($disk)->writeStream($path, $stream);
-            fclose($stream);
+
+            if ($stream === false) {
+                throw ExportException::storageWriteFailed($disk, $path);
+            }
+
+            try {
+                if (! Storage::disk($disk)->writeStream($path, $stream)) {
+                    throw ExportException::storageWriteFailed($disk, $path);
+                }
+            } finally {
+                fclose($stream);
+            }
 
             return $count;
         } finally {

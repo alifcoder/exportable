@@ -23,7 +23,7 @@ final class RunExport implements ShouldQueue
     use Queueable;
 
     /** Operator-facing ExportException codes that must reach the exception handler. */
-    private const array REPORTED_CODES = ['owner_missing'];
+    private const array REPORTED_CODES = ['owner_missing', 'storage_write_failed'];
 
     public int $tries = 1;
 

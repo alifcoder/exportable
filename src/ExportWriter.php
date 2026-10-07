@@ -6,7 +6,6 @@ namespace Alif\Export;
 
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Writers\CsvWriter;
-use Alif\Export\Writers\PdfWriter;
 use Alif\Export\Writers\Writer;
 use Alif\Export\Writers\XlsxWriter;
 
@@ -35,7 +34,6 @@ final class ExportWriter
         return match ($format) {
             ExportFormat::Csv => new CsvWriter,
             ExportFormat::Xlsx => new XlsxWriter,
-            ExportFormat::Pdf => new PdfWriter,
         };
     }
 }

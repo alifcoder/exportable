@@ -270,7 +270,7 @@ final class ExportManagementTest extends TestCase
 
     public function test_definition_needs_the_exportable_query_parameter(): void
     {
-        $this->actingAs($this->user)->getJson('/exports/definition')->assertNotFound();
+        $this->actingAs($this->user)->getJson('/exports/definition')->assertForbidden();
         $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders')->assertOk()->assertJsonPath('data.key', 'orders');
     }
 

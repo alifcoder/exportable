@@ -17,7 +17,6 @@ return [
     'max_rows' => [
         'csv' => 500_000,
         'xlsx' => 500_000,
-        'pdf' => 2_000,
     ],
     'max_active_per_user' => 3,
 
@@ -44,7 +43,7 @@ return [
     // Only these keys of the request "data" object reach the host filter.
     'data_parameters' => ['filter', 'where', 'search', 'search_type', 'sort', 'with_deleted', 'only_deleted'],
     // Top-level request keys rejected with 422.
-    'prohibited_parameters' => ['all', 'pos_auth_id'],
+    'prohibited_parameters' => [],
 
     'routes' => [
         'enabled' => true,

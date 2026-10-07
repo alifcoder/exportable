@@ -198,14 +198,14 @@ final class ExportContractTest extends TestCase
 
     public function test_definition_returns_key_title_formats_columns_and_child_columns(): void
     {
-        config(['export.max_rows.csv' => 111, 'export.max_rows.xlsx' => 22, 'export.max_rows.pdf' => 3]);
+        config(['export.max_rows.csv' => 111, 'export.max_rows.xlsx' => 22]);
 
         $response = $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders');
 
         $response->assertOk()
             ->assertJsonPath('data.key', 'orders')
             ->assertJsonPath('data.title', 'Orders')
-            ->assertJsonPath('data.formats', ['csv' => 111, 'xlsx' => 22, 'pdf' => 3])
+            ->assertJsonPath('data.formats', ['csv' => 111, 'xlsx' => 22])
             ->assertJsonPath('data.columns.0', ['key' => 'number', 'label' => 'Number'])
             ->assertJsonPath('data.columns.1', ['key' => 'total', 'label' => 'Total'])
             ->assertJsonPath('data.child_columns', [['key' => 'sku', 'label' => 'SKU'], ['key' => 'qty', 'label' => 'Qty']]);
@@ -226,9 +226,9 @@ final class ExportContractTest extends TestCase
         $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders')->assertForbidden();
     }
 
-    public function test_definition_for_unknown_key_is_404(): void
+    public function test_definition_for_unknown_key_is_403_like_a_denied_one(): void
     {
-        $this->actingAs($this->user)->getJson('/exports/definition?exportable=nope')->assertNotFound();
+        $this->actingAs($this->user)->getJson('/exports/definition?exportable=nope')->assertForbidden();
     }
 
     // ---- file layout ------------------------------------------------------
@@ -286,27 +286,18 @@ final class ExportContractTest extends TestCase
 
     // ---- caps -------------------------------------------------------------
 
-    /** "More documents than the format cap returns 422 on file.format." (pdf) */
-    public function test_pdf_cap_is_enforced_at_submit(): void
+    /** "More documents than the format cap returns 422 on file.format." (xlsx) */
+    public function test_xlsx_cap_is_enforced_at_submit(): void
     {
         $this->seedTwo();
-        config(['export.max_rows.pdf' => 1]);
+        config(['export.max_rows.xlsx' => 1]);
 
-        $this->submit($this->payload(['format' => 'pdf']))
+        $this->submit($this->payload(['format' => 'xlsx']))
             ->assertStatus(422)->assertJsonValidationErrors(['file.format']);
         $this->assertSame(0, DataExport::count());
     }
 
     // ---- hostile content end to end -----------------------------------------
-
-    public function test_pdf_export_with_hostile_cell_completes_and_is_a_pdf(): void
-    {
-        Order::create(['number' => '<img src="http://127.0.0.1:1/evil"><script>x</script>', 'total' => '1']);
-
-        $export = $this->completed($this->payload(['format' => 'pdf']));
-
-        $this->assertStringStartsWith('%PDF', Storage::disk($export->disk)->get($export->path));
-    }
 
     public function test_csv_end_to_end_prefixes_text_but_not_numeric_negative(): void
     {
@@ -352,7 +343,7 @@ final class ExportContractTest extends TestCase
     public function test_completed_download_is_200_attachment_with_slug_date_filename(): void
     {
         $this->seedTwo();
-        foreach (['csv' => 'text/csv', 'xlsx' => 'spreadsheetml', 'pdf' => 'application/pdf'] as $format => $mime) {
+        foreach (['csv' => 'text/csv', 'xlsx' => 'spreadsheetml'] as $format => $mime) {
             $export = $this->completed($this->payload(['format' => $format]));
 
             $response = $this->actingAs($this->user)->get("/exports/{$export->id}/download");
