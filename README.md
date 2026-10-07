@@ -105,3 +105,4 @@ STRESS_ROWS=25000 STRESS_CSV_ROWS=250000 STRESS_PDF_ROWS=1000 vendor/bin/phpunit
 - Export redelivered while running: worker `retry_after` must exceed `export.queue.timeout`.
 - `failed` with `export_failed`: check logs; an undeclared relation in a column (lazy loading is blocked) is the usual cause.
 - `incompatible_query_filter`: installed `alifcoder/query-filter` is outside `>=2.0.1 <3.0.0`.
+# exportable
