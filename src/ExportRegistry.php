@@ -30,6 +30,12 @@ final class ExportRegistry
         $this->map[$key] = $class;
     }
 
+    /** @return list<string> */
+    public function keys(): array
+    {
+        return array_keys($this->map);
+    }
+
     public function has(string $key): bool
     {
         return isset($this->map[$key]);

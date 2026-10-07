@@ -5,22 +5,24 @@
   "license": "proprietary",
   "require": {
     "php": "^8.3",
-    "laravel/framework": "^13.0",
-    "illuminate/support": "^13.0",
-    "illuminate/database": "^13.0",
-    "illuminate/queue": "^13.0",
-    "illuminate/http": "^13.0",
-    "illuminate/validation": "^13.0",
+    "alifcoder/query-filter": "^2.0.1",
+    "barryvdh/laravel-dompdf": "^3.1",
     "illuminate/auth": "^13.0",
     "illuminate/console": "^13.0",
-    "alifcoder/query-filter": "^2.0.1",
-    "maatwebsite/excel": "^4.0",
-    "barryvdh/laravel-dompdf": "^3.1"
+    "illuminate/database": "^13.0",
+    "illuminate/http": "^13.0",
+    "illuminate/queue": "^13.0",
+    "illuminate/support": "^13.0",
+    "illuminate/validation": "^13.0",
+    "laravel/framework": "^13.0",
+    "openspout/openspout": "^4"
   },
   "require-dev": {
     "larastan/larastan": "^3.12",
     "laravel/pint": "^1.32",
+    "league/flysystem-aws-s3-v3": "^3.35",
     "orchestra/testbench": "^11.0",
+    "phpoffice/phpspreadsheet": "^5.10",
     "phpunit/phpunit": "^12.0"
   },
   "autoload": {

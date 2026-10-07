@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * @property string $id
@@ -74,13 +75,77 @@ class DataExport extends Model
         return $this->expires_at !== null && $this->expires_at->isPast();
     }
 
+    /** Completed, not expired and a file recorded. Cheap: does not touch the storage disk. */
     public function isDownloadable(): bool
     {
         return $this->status === self::STATUS_COMPLETED
             && ! $this->isExpired()
             && $this->disk !== null
-            && $this->path !== null
-            && Storage::disk($this->disk)->exists($this->path);
+            && $this->path !== null;
+    }
+
+    public function fileExists(): bool
+    {
+        return $this->disk !== null && $this->path !== null && Storage::disk($this->disk)->exists($this->path);
+    }
+
+    /**
+     * Atomically move pending → processing and record where the file will go, so pruning can delete the file of a
+     * crashed export. False when another delivery already claimed it.
+     */
+    public function claim(string $disk, string $path): bool
+    {
+        $claimed = static::query()
+            ->whereKey($this->getKey())
+            ->where('status', self::STATUS_PENDING)
+            ->update(['status' => self::STATUS_PROCESSING, 'started_at' => now(), 'disk' => $disk, 'path' => $path]);
+
+        if ($claimed === 0) {
+            return false;
+        }
+
+        $this->refresh();
+
+        return true;
+    }
+
+    public function markCompleted(int $rows): void
+    {
+        $options = $this->exportOptions();
+        $slug = Str::slug($options->title ?? $options->exportable, '_') ?: 'export';
+
+        $this->update([
+            'status' => self::STATUS_COMPLETED,
+            'file_name' => sprintf('%s_%s.%s', $slug, now()->format('Y-m-d_His'), $options->format->extension()),
+            'rows_count' => $rows,
+            'finished_at' => now(),
+            'expires_at' => now()->addHours((int) config('export.ttl_hours', 24)),
+        ]);
+    }
+
+    public function markFailed(string $errorCode): void
+    {
+        $this->update(['status' => self::STATUS_FAILED, 'error_code' => $errorCode, 'finished_at' => now()]);
+    }
+
+    /** True while the row can still move on its own (a worker may be about to claim or finish it). */
+    public function isInFlight(): bool
+    {
+        return in_array($this->status, [self::STATUS_PENDING, self::STATUS_PROCESSING], true);
+    }
+
+    /**
+     * Atomically delete the row unless a live worker is processing it. Pending rows are deleted too: a worker that
+     * later finds no row does nothing.
+     */
+    public function deleteIfIdle(): bool
+    {
+        return static::query()
+            ->whereKey($this->getKey())
+            ->where(fn (Builder $q) => $q
+                ->where('status', '!=', self::STATUS_PROCESSING)
+                ->orWhere(fn (Builder $stale) => $stale->stale()))
+            ->delete() > 0;
     }
 
     /** A processing row is stuck when its worker started it before this moment (worker died). */
@@ -98,27 +163,7 @@ class DataExport extends Model
     }
 
     /**
-     * Pending/processing rows that are still live (not stale).
-     *
-     * @param  Builder<static>  $query
-     */
-    public function scopeActive(Builder $query): void
-    {
-        $query->where(fn (Builder $q) => $q
-            ->where(fn (Builder $p) => $p
-                ->where('status', self::STATUS_PENDING)
-                ->where('created_at', '>=', self::pendingCutoff()))
-            ->orWhere(fn (Builder $p) => $p
-                ->where('status', self::STATUS_PROCESSING)
-                ->where(fn (Builder $s) => $s
-                    ->where('started_at', '>=', self::staleCutoff())
-                    ->orWhere(fn (Builder $n) => $n
-                        ->whereNull('started_at')
-                        ->where('created_at', '>=', self::staleCutoff())))));
-    }
-
-    /**
-     * Pending/processing rows that are stuck.
+     * Pending/processing rows that are stuck: a lost dispatch, or a worker that died mid-run.
      *
      * @param  Builder<static>  $query
      */
@@ -130,11 +175,18 @@ class DataExport extends Model
                 ->where('created_at', '<', self::pendingCutoff()))
             ->orWhere(fn (Builder $p) => $p
                 ->where('status', self::STATUS_PROCESSING)
-                ->where(fn (Builder $s) => $s
-                    ->where('started_at', '<', self::staleCutoff())
-                    ->orWhere(fn (Builder $n) => $n
-                        ->whereNull('started_at')
-                        ->where('created_at', '<', self::staleCutoff())))));
+                ->whereRaw('coalesce(started_at, created_at) < ?', [self::staleCutoff()])));
+    }
+
+    /**
+     * Pending/processing rows that are still live (not stale); these count toward the user's quota.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->whereIn('status', [self::STATUS_PENDING, self::STATUS_PROCESSING])
+            ->whereNot(fn (Builder $q) => $q->stale());
     }
 
     /** @return Builder<static> */
@@ -144,14 +196,10 @@ class DataExport extends Model
 
         return static::query()->where(fn (Builder $q) => $q
             ->where('expires_at', '<', now())
-            ->orWhere(fn (Builder $f) => $f
+            ->orWhere(fn (Builder $failed) => $failed
                 ->where('status', self::STATUS_FAILED)
-                ->where(fn (Builder $t) => $t
-                    ->where('finished_at', '<', $ttlCutoff)
-                    ->orWhere(fn (Builder $n) => $n
-                        ->whereNull('finished_at')
-                        ->where('updated_at', '<', $ttlCutoff))))
-            ->orWhere(fn (Builder $f) => $f->stale()));
+                ->whereRaw('coalesce(finished_at, updated_at) < ?', [$ttlCutoff]))
+            ->orWhere(fn (Builder $stuck) => $stuck->stale()));
     }
 
     protected function pruning(): void

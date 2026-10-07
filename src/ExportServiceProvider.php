@@ -17,7 +17,15 @@ final class ExportServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/export.php', 'export');
 
-        $this->app->singleton(ExportRegistry::class);
+        $this->app->singleton(ExportRegistry::class, function ($app): ExportRegistry {
+            $registry = new ExportRegistry($app);
+
+            foreach ((array) config('export.exportables', []) as $key => $class) {
+                $registry->register((string) $key, (string) $class);
+            }
+
+            return $registry;
+        });
         $this->app->bind(ExportAuth::class, LaravelExportAuth::class);
     }
 

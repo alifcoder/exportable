@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    // Documents available for export: key => class implementing Contracts\Exportable. Hosts may also call
+    // app(ExportRegistry::class)->register($key, $class) from a service provider.
+    'exportables' => [],
+
     // Storage disk for generated files; null uses filesystems.default.
     'disk' => null,
     'directory' => 'exports',
@@ -12,7 +16,7 @@ return [
     // Output-row caps per format.
     'max_rows' => [
         'csv' => 500_000,
-        'xlsx' => 50_000,
+        'xlsx' => 500_000,
         'pdf' => 2_000,
     ],
     'max_active_per_user' => 3,

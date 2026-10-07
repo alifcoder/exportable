@@ -114,9 +114,9 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
         foreach (['A2' => '=SUM(A1)', 'A3' => '+1', 'A4' => '-1', 'A5' => '@x'] as $coord => $expected) {
             $cell = $sheet->getCell($coord);
-            $this->assertSame(DataType::TYPE_STRING, $cell->getDataType(), $coord);
+            $this->assertContains($cell->getDataType(), [DataType::TYPE_STRING, DataType::TYPE_INLINE], $coord); // text, never a formula
             $this->assertFalse($cell->isFormula(), $coord);
-            $this->assertSame($expected, $cell->getValue(), $coord);
+            $this->assertSame($expected, (string) $cell->getValue(), $coord);
         }
     }
 

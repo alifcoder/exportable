@@ -220,7 +220,9 @@ final class ExportFlowTest extends TestCase
         $withChildren = array_values(array_filter($lines, fn (array $l): bool => $l[0] === 'A-1'));
         $this->assertCount(3, $withChildren);
         $this->assertSame(['s1', 's2', 's3'], array_column($withChildren, 2));
-        $this->assertSame(['10.5'], array_values(array_unique(array_column($withChildren, 1))));
+        $totals = array_values(array_unique(array_column($withChildren, 1)));
+        $this->assertCount(1, $totals);
+        $this->assertEqualsWithDelta(10.5, (float) $totals[0], 0.0000001);
 
         $childless = array_values(array_filter($lines, fn (array $l): bool => $l[0] === "'=SUM(A1)"));
         $this->assertCount(1, $childless);

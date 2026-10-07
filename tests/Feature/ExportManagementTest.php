@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\Actions\GenerateExport;
 use Alif\Export\Events\ExportFinished;
-use Alif\Export\ExportBuilder;
 use Alif\Export\ExportRegistry;
-use Alif\Export\ExportWriter;
 use Alif\Export\Jobs\RunExport;
 use Alif\Export\Models\DataExport;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderLine;
+use Alif\Export\Tests\Fixtures\PlainOrderExportable;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Foundation\Http\FormRequest as BaseFormRequest;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -99,7 +99,7 @@ final class ExportManagementTest extends TestCase
         $this->actingAs($this->user)->deleteJson("/exports/{$id}")->assertNoContent();
         $this->assertNull(DataExport::find($id));
 
-        (new RunExport($id))->handle(app(ExportAuth::class), app(ExportRegistry::class), app(ExportBuilder::class), app(ExportWriter::class));
+        (new RunExport($id))->handle(app(GenerateExport::class));
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
@@ -225,6 +225,74 @@ final class ExportManagementTest extends TestCase
         $this->assertSame(1, DataExport::findOrFail($response->json('data.id'))->rows_count);
     }
 
+    // ---- regressions found in review ---------------------------------------------------
+
+    public function test_a_throwing_finished_listener_does_not_fail_or_delete_a_completed_export(): void
+    {
+        Order::create(['number' => 'A', 'total' => '1']);
+        Event::listen(ExportFinished::class, fn () => throw new \RuntimeException('mail down'));
+
+        $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->assertStatus(202)->json('data.id');
+
+        $export = DataExport::findOrFail($id);
+        $this->assertSame('completed', $export->status, (string) $export->error_code);
+        $this->assertTrue(Storage::disk('local')->exists($export->path));
+    }
+
+    public function test_listing_does_not_touch_the_storage_disk_per_item(): void
+    {
+        // The file is missing on purpose: the list must not look for it (one storage call per item on S3).
+        $export = $this->makeExport([
+            'status' => DataExport::STATUS_COMPLETED, 'disk' => 'local', 'path' => 'exports/missing.csv', 'expires_at' => now()->addHour(),
+        ]);
+
+        $this->actingAs($this->user)->getJson('/exports')->assertOk()->assertJsonPath('data.0.download_url', route('export.download', $export->id));
+        $this->actingAs($this->user)->get("/exports/{$export->id}/download")->assertStatus(410);
+    }
+
+    public function test_quota_is_checked_before_the_filter_and_row_count_are_evaluated(): void
+    {
+        config(['queue.default' => 'null', 'export.max_active_per_user' => 1]);
+        $this->makeExport(['status' => DataExport::STATUS_PENDING]);
+
+        // An invalid filter would be a 422 if the request were evaluated first.
+        $this->actingAs($this->user)->postJson('/exports', $this->payload() + ['data' => ['filter' => ['total' => ['bogus' => 1]]]])
+            ->assertStatus(429);
+    }
+
+    public function test_index_accepts_page_when_the_host_fails_on_unknown_fields(): void
+    {
+        BaseFormRequest::failOnUnknownFields();
+        $this->beforeApplicationDestroyed(fn () => BaseFormRequest::failOnUnknownFields(false));
+
+        $this->actingAs($this->user)->getJson('/exports?page=1&per_page=5')->assertOk();
+    }
+
+    public function test_definition_needs_the_exportable_query_parameter(): void
+    {
+        $this->actingAs($this->user)->getJson('/exports/definition')->assertNotFound();
+        $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders')->assertOk()->assertJsonPath('data.key', 'orders');
+    }
+
+    public function test_exportables_can_be_registered_through_config(): void
+    {
+        config(['export.exportables' => ['plain.orders' => PlainOrderExportable::class]]);
+        app()->forgetInstance(ExportRegistry::class);
+
+        $this->assertTrue(app(ExportRegistry::class)->has('plain.orders'));
+    }
+
+    public function test_a_column_removed_from_the_definition_after_submit_fails_the_job_with_unknown_column(): void
+    {
+        Queue::fake();
+        $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->assertStatus(202)->json('data.id');
+        DataExport::query()->whereKey($id)->update(['options' => ['exportable' => 'orders', 'format' => 'csv', 'columns' => ['gone'], 'include_children' => false, 'child_columns' => [], 'title' => null, 'parameters' => []]]);
+
+        (new RunExport($id))->handle(app(GenerateExport::class));
+
+        $this->assertSame('unknown_column', DataExport::findOrFail($id)->error_code);
+    }
+
     // ---- real file contents ----------------------------------------------------------
 
     public function test_xlsx_file_opens_and_contains_flattened_rows(): void
@@ -265,7 +333,7 @@ final class ExportManagementTest extends TestCase
 
         Order::create(['number' => 'B', 'total' => '1']);
         Order::create(['number' => 'C', 'total' => '1']);
-        (new RunExport($id))->handle(app(ExportAuth::class), app(ExportRegistry::class), app(ExportBuilder::class), app(ExportWriter::class));
+        (new RunExport($id))->handle(app(GenerateExport::class));
 
         $export = DataExport::findOrFail($id);
         $this->assertSame('failed', $export->status);
@@ -278,7 +346,7 @@ final class ExportManagementTest extends TestCase
         Order::create(['number' => 'A', 'total' => '1']);
         Queue::fake();
         $id = $this->actingAs($this->user)->postJson('/exports', $this->payload())->json('data.id');
-        $handle = fn () => (new RunExport($id))->handle(app(ExportAuth::class), app(ExportRegistry::class), app(ExportBuilder::class), app(ExportWriter::class));
+        $handle = fn () => (new RunExport($id))->handle(app(GenerateExport::class));
 
         $handle();
         $first = DataExport::findOrFail($id);

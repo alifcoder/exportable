@@ -8,6 +8,7 @@
   <groups>
     <exclude>
       <group>stress</group>
+      <group>infra</group>
     </exclude>
   </groups>
   <source>

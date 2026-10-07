@@ -68,4 +68,13 @@ final class ExportRegistryTest extends TestCaseWithoutDatabase
             $this->assertSame('unknown_exportable', $e->errorCode);
         }
     }
+
+    public function test_keys_lists_every_registered_key(): void
+    {
+        $registry = new ExportRegistry($this->app);
+        $registry->register('a.one', OrderExportable::class);
+        $registry->register('b.two', OrderExportable::class);
+
+        $this->assertSame(['a.one', 'b.two'], $registry->keys());
+    }
 }

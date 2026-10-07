@@ -19,8 +19,9 @@ use PHPUnit\Framework\Attributes\Group;
 /**
  * Not part of the default run. Execute with:
  *   STRESS_ROWS=50000 STRESS_MEMORY_MB=512 vendor/bin/phpunit --group stress
- * STRESS_ROWS is the number of documents (2 child lines each); pdf is capped at STRESS_PDF_ROWS (default 2000).
- * Runs on in-memory sqlite and the fake local disk, so it measures the SDK, not your database or storage.
+ * STRESS_ROWS is the number of documents (2 child lines each) for xlsx, STRESS_CSV_ROWS for csv, STRESS_PDF_ROWS for pdf.
+ * Add TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=55432 to run on Postgres instead of in-memory sqlite.
+ * Uses the fake local disk, so it measures the SDK and the chosen database, not real storage.
  */
 #[Group('stress')]
 final class ExportStressTest extends TestCase
@@ -34,7 +35,11 @@ final class ExportStressTest extends TestCase
     #[DataProvider('formats')]
     public function test_export_stays_within_time_and_memory_budget(string $format): void
     {
-        $documents = $format === 'pdf' ? (int) (getenv('STRESS_PDF_ROWS') ?: 1000) : (int) (getenv('STRESS_ROWS') ?: 25000);
+        $documents = match ($format) {
+            'pdf' => (int) (getenv('STRESS_PDF_ROWS') ?: 1000),
+            'csv' => (int) (getenv('STRESS_CSV_ROWS') ?: getenv('STRESS_ROWS') ?: 25000),
+            default => (int) (getenv('STRESS_ROWS') ?: 25000),
+        };
         $memoryBudgetMb = (int) (getenv('STRESS_MEMORY_MB') ?: 512);
 
         Storage::fake('local');

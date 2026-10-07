@@ -38,6 +38,7 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->index(['owner_id', 'status']);
+            $table->index(['owner_id', 'created_at']);
         });
 
         if (DB::getDriverName() === 'pgsql') {

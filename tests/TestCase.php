@@ -8,19 +8,33 @@ use Alif\Export\ExportServiceProvider;
 use Alif\Export\Tests\Fixtures\User;
 use Barryvdh\DomPDF\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
-use Maatwebsite\Excel\ExcelServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class TestCase extends Orchestra
 {
     protected function getPackageProviders($app): array
     {
-        return [ExportServiceProvider::class, ExcelServiceProvider::class, ServiceProvider::class];
+        return [ExportServiceProvider::class, ServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
     {
         $app['config']->set('database.default', 'testing');
+
+        // Opt-in: run the suite on Postgres (TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=55432 ...) instead of in-memory sqlite.
+        if (getenv('TEST_DB_HOST') !== false) {
+            $app['config']->set('database.default', 'pgsql');
+            $app['config']->set('database.connections.pgsql', [
+                'driver' => 'pgsql',
+                'host' => getenv('TEST_DB_HOST'),
+                'port' => getenv('TEST_DB_PORT') ?: '5432',
+                'database' => getenv('TEST_DB_DATABASE') ?: 'erp_export_test',
+                'username' => getenv('TEST_DB_USERNAME') ?: 'erp',
+                'password' => getenv('TEST_DB_PASSWORD') ?: 'erp',
+                'charset' => 'utf8',
+                'search_path' => 'public',
+            ]);
+        }
         $app['config']->set('queue.default', 'sync');
         $app['config']->set('filesystems.default', 'local');
         $app['config']->set('auth.providers.users.model', User::class);
@@ -29,9 +43,27 @@ abstract class TestCase extends Orchestra
         $app['config']->set('export.queue.name', null);
     }
 
+    protected function tearDown(): void
+    {
+        $this->dropPersistentTables();
+
+        parent::tearDown();
+    }
+
+    /** A persistent (Postgres) database must not leak tables between tests, even after a crashed run. */
+    private function dropPersistentTables(): void
+    {
+        if (config('database.default') === 'pgsql') {
+            foreach (['data_exports', 'order_lines', 'orders', 'users'] as $table) {
+                Schema::dropIfExists($table);
+            }
+        }
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->dropPersistentTables();
 
         Schema::create('users', function ($t): void {
             $t->uuid('id')->primary();

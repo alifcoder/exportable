@@ -13,14 +13,6 @@ final class ExportException extends RuntimeException
         parent::__construct($message);
     }
 
-    public static function incompatibleQueryFilter(?string $found, string $required): self
-    {
-        return new self(
-            sprintf('alifcoder/export-sdk requires alifcoder/query-filter %s, found %s', $required, $found ?? 'none'),
-            'incompatible_query_filter',
-        );
-    }
-
     public static function unknownExportable(string $key): self
     {
         return new self(sprintf('Unknown exportable "%s".', $key), 'unknown_exportable');
@@ -29,6 +21,11 @@ final class ExportException extends RuntimeException
     public static function invalidRegistration(string $message): self
     {
         return new self($message, 'invalid_registration');
+    }
+
+    public static function unknownColumn(string $key): self
+    {
+        return new self(sprintf('Column "%s" no longer exists in the export definition.', $key), 'unknown_column');
     }
 
     public static function rowLimitExceeded(int $cap): self

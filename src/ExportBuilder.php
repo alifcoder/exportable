@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Alif\Export;
 
-use Alif\Export\Contracts\Exportable;
-use Alif\Export\Enums\ExportFormat;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Closure;
@@ -20,30 +18,86 @@ use Illuminate\Validation\ValidationException;
 final class ExportBuilder
 {
     /** Apply the host filter, then own eager loading and ordering. */
-    public function query(Exportable $exportable, ExportOptions $options): Builder
+    public function query(ExportPlan $plan): Builder
     {
-        $builder = $exportable->query();
-        $this->assertChildRelation($exportable, $options, $builder);
-        $exportable->filter($options->parameters)->apply($builder);
+        $builder = $plan->exportable->query();
+        $this->assertChildRelation($plan, $builder);
+        $plan->exportable->filter($plan->options->parameters)->apply($builder);
 
         $builder->setEagerLoads([]);
-        $builder->with($this->eagerLoads($exportable, $options));
+        $builder->with($this->eagerLoads($plan));
         $builder->orderBy($builder->getModel()->getQualifiedKeyName());
 
         return $builder;
     }
 
     /** @throws ValidationException */
-    public function assertWithinCap(Builder $query, ExportFormat $format, ?string $childRelation = null): void
+    public function assertWithinCap(ExportPlan $plan, Builder $query): void
     {
-        $cap = $format->maxRows();
+        $cap = $plan->options->format->maxRows();
 
-        if ((clone $query)->reorder()->offset($cap)->limit(1)->exists()
-            || ($childRelation !== null && $this->outputRows($query, $childRelation) > $cap)) {
+        // With children the output row count is at least the document count, so one count query covers both.
+        $exceeds = $plan->childRelation === null
+            ? (clone $query)->reorder()->offset($cap)->limit(1)->exists()
+            : $this->outputRows($query, $plan->childRelation) > $cap;
+
+        if ($exceeds) {
             throw ValidationException::withMessages([
-                'file.format' => [sprintf('Too many rows for %s export (maximum %d).', $format->value, $cap)],
+                'file.format' => [sprintf('Too many rows for %s export (maximum %d).', $plan->options->format->value, $cap)],
             ]);
         }
+    }
+
+    /**
+     * @return Generator<int, list<string|int|float|null>>
+     *
+     * @throws ExportException
+     */
+    public function rows(ExportPlan $plan, Builder $query): Generator
+    {
+        $cap = $plan->options->format->maxRows();
+        $blankChild = array_fill(0, count($plan->childColumns), null);
+        $emitted = 0;
+
+        foreach ($query->lazy((int) config('export.chunk_size', 500)) as $row) {
+            // Eloquent only arms the guard for result sets with more than one model; arm it for every row.
+            $row->preventsLazyLoading = Model::preventsLazyLoading();
+            $base = $this->values($plan->columns, $row);
+
+            foreach ($this->lines($plan, $row, $base, $blankChild) as $line) {
+                if (++$emitted > $cap) {
+                    throw ExportException::rowLimitExceeded($cap);
+                }
+
+                yield $line;
+            }
+        }
+    }
+
+    /**
+     * One line per child with the document cells repeated, or a single line for a childless document.
+     *
+     * @param  list<string|int|float|null>  $base
+     * @param  list<null>  $blankChild
+     * @return list<list<string|int|float|null>>
+     */
+    private function lines(ExportPlan $plan, Model $row, array $base, array $blankChild): array
+    {
+        if ($plan->childRelation === null) {
+            return [$base];
+        }
+
+        $children = $row->getRelation($plan->childRelation)->all();
+
+        if ($children === []) {
+            return [[...$base, ...$blankChild]];
+        }
+
+        return array_map(function (Model $child) use ($plan, $base): array {
+            $child->preventsLazyLoading = Model::preventsLazyLoading();
+
+            return [...$base, ...$this->values($plan->childColumns, $child)];
+        }, $children);
     }
 
     /** Output rows when children are flattened: one per child, or one for a childless document. */
@@ -63,146 +117,51 @@ final class ExportBuilder
             ->value('total');
     }
 
-    /** @return list<string> */
-    public function headings(Exportable $exportable, ExportOptions $options): array
-    {
-        return array_map(
-            fn (Column $column): string => (string) __($column->label()),
-            $this->selectedColumns($exportable, $options),
-        );
-    }
-
-    /** @return list<bool> */
-    public function numericMap(Exportable $exportable, ExportOptions $options): array
-    {
-        return array_map(
-            fn (Column $column): bool => $column->isNumeric(),
-            $this->selectedColumns($exportable, $options),
-        );
-    }
-
-    /**
-     * @return Generator<int, list<string|int|float|null>>
-     *
-     * @throws ExportException
-     */
-    public function rows(Exportable $exportable, ExportOptions $options, Builder $query): Generator
-    {
-        $cap = $options->format->maxRows();
-        $childRelation = $options->includeChildren ? $exportable->childRelation() : null;
-        $childColumns = $childRelation === null ? [] : $this->pick($exportable->childColumns(), $options->childColumns);
-        $blankChild = array_fill(0, count($childColumns), null);
-        $columns = $this->pick($exportable->columns(), $options->columns);
-        $emitted = 0;
-
-        foreach ($query->lazy((int) config('export.chunk_size', 500)) as $row) {
-            // Eloquent only arms the guard for result sets with more than one model; arm it for every row.
-            $row->preventsLazyLoading = Model::preventsLazyLoading();
-            $base = $this->values($columns, $row);
-
-            $children = $childRelation === null ? [] : $row->getRelation($childRelation)->all();
-
-            $lines = $childRelation === null
-                ? [$base]
-                : ($children === []
-                    ? [[...$base, ...$blankChild]]
-                    : array_map(function (Model $child) use ($base, $childColumns): array {
-                        $child->preventsLazyLoading = Model::preventsLazyLoading();
-
-                        return [...$base, ...$this->values($childColumns, $child)];
-                    }, $children));
-
-            foreach ($lines as $line) {
-                if (++$emitted > $cap) {
-                    throw ExportException::rowLimitExceeded($cap);
-                }
-
-                yield $line;
-            }
-        }
-    }
-
     /** @param Builder<Model> $builder */
-    private function assertChildRelation(Exportable $exportable, ExportOptions $options, Builder $builder): void
+    private function assertChildRelation(ExportPlan $plan, Builder $builder): void
     {
-        $relation = $options->includeChildren ? $exportable->childRelation() : null;
-
-        if ($relation === null) {
+        if ($plan->childRelation === null) {
             return;
         }
 
         $model = $builder->getModel();
 
-        if (! method_exists($model, $relation) || ! $model->{$relation}() instanceof HasMany) {
+        if (! method_exists($model, $plan->childRelation) || ! $model->{$plan->childRelation}() instanceof HasMany) {
             throw ExportException::invalidRegistration(sprintf(
                 'Child relation "%s" on %s must be a HasMany relation.',
-                $relation,
+                $plan->childRelation,
                 $model::class,
             ));
         }
     }
 
     /** @return array<int|string, string|Closure> */
-    private function eagerLoads(Exportable $exportable, ExportOptions $options): array
+    private function eagerLoads(ExportPlan $plan): array
     {
         $loads = [];
 
-        foreach ($this->pick($exportable->columns(), $options->columns) as $column) {
+        foreach ($plan->columns as $column) {
             foreach ($column->getRelations() as $relation) {
-                $loads[$relation] = $loads[$relation] ?? null;
+                $loads[$relation] ??= null;
             }
         }
 
-        $childRelation = $options->includeChildren ? $exportable->childRelation() : null;
+        if ($plan->childRelation !== null) {
+            $loads[$plan->childRelation] = fn ($query) => $query->orderBy($query->getModel()->getQualifiedKeyName());
 
-        if ($childRelation !== null) {
-            $loads[$childRelation] = fn ($query) => $query->orderBy($query->getModel()->getQualifiedKeyName());
-
-            foreach ($this->pick($exportable->childColumns(), $options->childColumns) as $column) {
+            foreach ($plan->childColumns as $column) {
                 foreach ($column->getRelations() as $relation) {
-                    $loads["{$childRelation}.{$relation}"] = $loads["{$childRelation}.{$relation}"] ?? null;
+                    $loads["{$plan->childRelation}.{$relation}"] ??= null;
                 }
             }
         }
 
         $with = [];
         foreach ($loads as $name => $constraint) {
-            if ($constraint === null) {
-                $with[] = $name;
-            } else {
-                $with[$name] = $constraint;
-            }
+            $constraint === null ? $with[] = $name : $with[$name] = $constraint;
         }
 
         return $with;
-    }
-
-    /** @return list<Column> */
-    private function selectedColumns(Exportable $exportable, ExportOptions $options): array
-    {
-        $columns = $this->pick($exportable->columns(), $options->columns);
-
-        if ($options->includeChildren && $exportable->childRelation() !== null) {
-            $columns = [...$columns, ...$this->pick($exportable->childColumns(), $options->childColumns)];
-        }
-
-        return array_values($columns);
-    }
-
-    /**
-     * @param  array<string, Column>  $available
-     * @param  list<string>  $keys
-     * @return array<string, Column>
-     */
-    private function pick(array $available, array $keys): array
-    {
-        $picked = [];
-
-        foreach ($keys as $key) {
-            $picked[$key] = $available[$key];
-        }
-
-        return $picked;
     }
 
     /**

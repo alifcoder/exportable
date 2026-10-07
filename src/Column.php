@@ -16,7 +16,7 @@ final class Column
 
     private function __construct(private readonly string $label, private readonly ?Closure $value) {}
 
-    /** @param Closure(Model): mixed|null $value Null reads data_get($row, $key). */
+    /** @param Closure|null $value fn (YourModel $row): mixed. Null reads data_get($row, $key). */
     public static function make(string $label, ?Closure $value = null): self
     {
         return new self($label, $value);
@@ -55,6 +55,6 @@ final class Column
 
     public function resolve(Model $row, string $key): mixed
     {
-        return $this->value instanceof Closure ? ($this->value)($row) : data_get($row, $key);
+        return $this->value === null ? data_get($row, $key) : ($this->value)($row);
     }
 }

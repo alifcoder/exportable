@@ -200,7 +200,7 @@ final class ExportContractTest extends TestCase
     {
         config(['export.max_rows.csv' => 111, 'export.max_rows.xlsx' => 22, 'export.max_rows.pdf' => 3]);
 
-        $response = $this->actingAs($this->user)->getJson('/exports/exportables/orders');
+        $response = $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders');
 
         $response->assertOk()
             ->assertJsonPath('data.key', 'orders')
@@ -214,7 +214,7 @@ final class ExportContractTest extends TestCase
 
     public function test_definition_for_exportable_without_children_has_empty_child_columns(): void
     {
-        $this->actingAs($this->user)->getJson('/exports/exportables/plain')
+        $this->actingAs($this->user)->getJson('/exports/definition?exportable=plain')
             ->assertOk()->assertJsonPath('data.child_columns', []);
     }
 
@@ -223,12 +223,12 @@ final class ExportContractTest extends TestCase
     {
         Gate::define('data-export', fn (): bool => false);
 
-        $this->actingAs($this->user)->getJson('/exports/exportables/orders')->assertForbidden();
+        $this->actingAs($this->user)->getJson('/exports/definition?exportable=orders')->assertForbidden();
     }
 
     public function test_definition_for_unknown_key_is_404(): void
     {
-        $this->actingAs($this->user)->getJson('/exports/exportables/nope')->assertNotFound();
+        $this->actingAs($this->user)->getJson('/exports/definition?exportable=nope')->assertNotFound();
     }
 
     // ---- file layout ------------------------------------------------------
@@ -314,7 +314,10 @@ final class ExportContractTest extends TestCase
 
         $rows = $this->csvRows($this->completed($this->payload()));
 
-        $this->assertSame(["'+1", '-5'], $rows[1]);
+        // The driver decides the decimal text ('-5' on sqlite, '-5.000000' on Postgres); the sign must survive unprefixed.
+        $this->assertSame("'+1", $rows[1][0]);
+        $this->assertEqualsWithDelta(-5.0, (float) $rows[1][1], 0.0000001);
+        $this->assertStringStartsWith('-5', $rows[1][1]);
     }
 
     // ---- download -----------------------------------------------------------

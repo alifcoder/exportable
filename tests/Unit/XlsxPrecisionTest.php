@@ -30,8 +30,8 @@ final class XlsxPrecisionTest extends TestCase
         $sheet = IOFactory::load(Storage::disk('local')->path('x.xlsx'))->getActiveSheet();
 
         $text = $sheet->getCell('A2');
-        $this->assertSame(DataType::TYPE_STRING, $text->getDataType());
-        $this->assertSame('12345678901234567', $text->getValue());
+        $this->assertContains($text->getDataType(), [DataType::TYPE_STRING, DataType::TYPE_INLINE]); // text, never a formula or number
+        $this->assertSame('12345678901234567', (string) $text->getValue());
 
         $number = $sheet->getCell('B2');
         $this->assertSame(DataType::TYPE_NUMERIC, $number->getDataType());
