@@ -47,7 +47,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     {
         $csv = $this->csv(['A', 'B'], [false, false], [['x', 'y']]);
 
-        $this->assertStringStartsWith("\xEF\xBB\xBF" . 'A,B', $csv);
+        $this->assertStringStartsWith("\xEF\xBB\xBF".'A,B', $csv);
         $this->assertSame([['A', 'B'], ['x', 'y']], $this->parse($csv));
     }
 
@@ -72,7 +72,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
         foreach (['=SUM(A1)', '+1', '-1', '@cmd', "\tx", "\rx"] as $value) {
             $parsed = $this->parse($this->csv(['h'], [false], [[$value]]));
 
-            $this->assertSame("'" . $value, $parsed[1][0], 'cell: ' . json_encode($value));
+            $this->assertSame("'".$value, $parsed[1][0], 'cell: '.json_encode($value));
         }
     }
 

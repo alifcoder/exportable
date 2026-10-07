@@ -32,7 +32,7 @@ final class ExportRegistryTest extends TestCaseWithoutDatabase
         foreach (['', 'Has Space', 'UPPER', 'a/b', 'x;y', str_repeat('a', 101)] as $key) {
             try {
                 $this->registry()->register($key, OrderExportable::class);
-                $this->fail('Key accepted: ' . $key);
+                $this->fail('Key accepted: '.$key);
             } catch (ExportException $e) {
                 $this->assertSame('invalid_registration', $e->errorCode);
             }

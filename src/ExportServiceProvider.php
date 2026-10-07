@@ -15,7 +15,7 @@ final class ExportServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/export.php', 'export');
+        $this->mergeConfigFrom(__DIR__.'/../config/export.php', 'export');
 
         $this->app->singleton(ExportRegistry::class);
         $this->app->bind(ExportAuth::class, LaravelExportAuth::class);
@@ -23,13 +23,13 @@ final class ExportServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'export');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'export');
 
         if ($this->app->runningInConsole()) {
-            $this->publishes([__DIR__ . '/../config/export.php' => config_path('export.php')], 'export-config');
+            $this->publishes([__DIR__.'/../config/export.php' => config_path('export.php')], 'export-config');
             $this->publishes([
-                __DIR__ . '/../database/migrations/create_data_exports_table.php.stub' => database_path(
-                    'migrations/' . date('Y_m_d_His') . '_create_data_exports_table.php',
+                __DIR__.'/../database/migrations/create_data_exports_table.php.stub' => database_path(
+                    'migrations/'.date('Y_m_d_His').'_create_data_exports_table.php',
                 ),
             ], 'export-migrations');
         }
@@ -37,7 +37,7 @@ final class ExportServiceProvider extends ServiceProvider
         if (config('export.routes.enabled')) {
             Route::prefix((string) config('export.routes.prefix'))
                 ->middleware((array) config('export.routes.middleware', []))
-                ->group(__DIR__ . '/../routes/export.php');
+                ->group(__DIR__.'/../routes/export.php');
         }
 
         if (config('export.prune.schedule')) {

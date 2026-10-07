@@ -81,7 +81,7 @@ final class ExportWriter
             // Exempt from formula neutralising only when the value really is a number, not by column flag alone.
             $isNumeric = ($numeric[$i] ?? false) && is_numeric($cell);
             $out[] = ! $isNumeric && is_string($cell) && $cell !== '' && in_array($cell[0], self::FORMULA_PREFIXES, true)
-                ? "'" . $cell
+                ? "'".$cell
                 : $cell;
         }
 
