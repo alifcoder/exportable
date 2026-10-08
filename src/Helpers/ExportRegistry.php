@@ -18,7 +18,7 @@ final class ExportRegistry
     /** @param class-string<Exportable> $class */
     public function register(string $key, string $class): void
     {
-        if (! preg_match('/^[a-z0-9_.-]{1,100}$/', $key)) {
+        if (! preg_match('/^[a-z0-9_.-]{1,100}$/D', $key)) {
             throw ExportException::invalidRegistration(sprintf('Invalid exportable key "%s".', $key));
         }
         if (! is_subclass_of($class, Exportable::class)) {

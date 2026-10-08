@@ -10,6 +10,7 @@ use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportDownloadDTO;
 use Alif\Export\DTO\Export\ExportListDTO;
 use Alif\Export\Entities\DataExport;
+use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Enums\ExportStatus;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportFile;
@@ -98,7 +99,7 @@ final readonly class ExportService implements ExportServiceInterface
             disk: (string) $export->disk,
             path: (string) $export->path,
             fileName: (string) $export->file_name,
-            mimeType: ExportCreateDTO::fromArray($export->options)->format->mimeType(),
+            mimeType: ExportFormat::from($export->format)->mimeType(),
         );
     }
 }

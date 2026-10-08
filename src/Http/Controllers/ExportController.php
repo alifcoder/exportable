@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Alif\Export\Http\Controllers;
 
 use Alif\Export\Http\Requests\Export\ExportCreateRequest;
-use Alif\Export\Http\Requests\Export\ExportDefinitionRequest;
 use Alif\Export\Http\Requests\Export\ExportListRequest;
 use Alif\Export\Http\Requests\Export\ExportOwnerRequest;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
@@ -22,9 +21,9 @@ final class ExportController extends Controller
 {
     public function __construct(private readonly ExportServiceInterface $exportService) {}
 
-    public function definition(ExportDefinitionRequest $request): ExportDefinitionResource
+    public function definition(ExportOwnerRequest $request): ExportDefinitionResource
     {
-        $key = $request->getExportableKey();
+        $key = (string) $request->query('exportable');
 
         return new ExportDefinitionResource($this->exportService->definition($request->getOwner(), $key), $key);
     }
