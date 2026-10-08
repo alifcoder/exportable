@@ -43,7 +43,7 @@ Response `202 {"data": {id, exportable, format, status, rows_count, error_code, 
 ### Notifications
 `Alif\Export\Events\ExportFinished` (carries the `DataExport`) is dispatched when an export becomes `completed` or `failed`. Listen to it in the host to notify the owner (mail, push, broadcast).
 
-Only `export.data_parameters` keys of `data` reach the filter; top-level `export.prohibited_parameters` (empty by default; add host-specific keys such as `all`) are rejected with 422.
+Only `export.data_parameters` keys of `data` reach the filter; everything else is dropped.
 
 ## Layout and safety
 - Children are flattened: one row per child with document columns repeated; a document without children yields one row with blank child cells. Output order: `columns` then `child_columns`.

@@ -43,7 +43,7 @@ final class ExportCreateRequest extends FormRequest
         $hasChildren = $exportable?->childRelation() !== null;
         $childrenOn = $hasChildren && $this->boolean('file.include_children');
 
-        $rules = [
+        return [
             'exportable' => ['required', 'string', 'max:100', fn (string $attribute, mixed $value, \Closure $fail) => is_string($value) && app(ExportRegistry::class)->has($value) ? null : $fail('The selected exportable is invalid.')],
             'data' => ['sometimes', 'nullable', 'array'],
             'file' => ['required', 'array'],
@@ -55,12 +55,6 @@ final class ExportCreateRequest extends FormRequest
             'file.child_columns.*' => ['string', 'distinct', Rule::in($childColumns)],
             'file.title' => ['nullable', 'string', 'max:150'],
         ];
-
-        foreach ((array) config('export.prohibited_parameters', []) as $key) {
-            $rules[(string) $key] = ['prohibited'];
-        }
-
-        return $rules;
     }
 
     public function exportableKey(): string

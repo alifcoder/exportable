@@ -96,15 +96,13 @@ final class ExportFlowTest extends TestCase
         $this->assertSame(0, DataExport::count());
     }
 
-    public function test_unknown_column_and_prohibited_param_are_rejected(): void
+    public function test_unknown_column_is_rejected(): void
     {
-        config()->set('export.prohibited_parameters', ['all']);
         $bad = $this->payload(false);
         $bad['file']['columns'] = ['nope'];
-        $bad['all'] = true;
 
         $this->actingAs($this->user)->postJson('/exports', $bad)
-            ->assertStatus(422)->assertJsonValidationErrors(['file.columns.0', 'all']);
+            ->assertStatus(422)->assertJsonValidationErrors(['file.columns.0']);
     }
 
     public function test_non_owner_gets_404(): void

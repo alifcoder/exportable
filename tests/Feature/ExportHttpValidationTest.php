@@ -181,15 +181,6 @@ final class ExportHttpValidationTest extends TestCase
             ->assertJsonValidationErrors(['exportable', 'file.format', 'file.columns']);
     }
 
-    public function test_prohibited_parameters_from_config_are_rejected_at_the_top_level(): void
-    {
-        config(['export.prohibited_parameters' => ['page', 'limit']]);
-
-        $this->store($this->valid() + ['page' => 1, 'limit' => 5])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['page', 'limit']);
-    }
-
     // ---- authorization on store --------------------------------------------------------
 
     public function test_forbidden_exportable_is_403_even_when_the_rest_of_the_payload_is_invalid(): void

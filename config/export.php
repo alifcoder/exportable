@@ -42,8 +42,6 @@ return [
 
     // Only these keys of the request "data" object reach the host filter.
     'data_parameters' => ['filter', 'where', 'search', 'search_type', 'sort', 'with_deleted', 'only_deleted'],
-    // Top-level request keys rejected with 422.
-    'prohibited_parameters' => [],
 
     'routes' => [
         'enabled' => true,
