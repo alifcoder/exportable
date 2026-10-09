@@ -58,6 +58,7 @@ final readonly class StartExport
         $query = $this->builder->query($plan);
         // Counted once: the same number is the progress denominator and the cap check.
         $rows = ExportConfig::bool('progress.enabled') ? $this->builder->countRows($plan, $query) : null;
+        $this->builder->assertNotEmpty($query, $rows);
         $this->builder->assertWithinCap($plan, $query, $rows);
 
         return new ExportTask($taskId, $ownerId, App::getLocale(), $dto, $rows);

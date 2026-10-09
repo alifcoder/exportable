@@ -52,6 +52,22 @@ final class StartExportTest extends TestCase
         ));
     }
 
+    public function test_an_export_that_selects_nothing_is_refused_before_a_job_is_queued(): void
+    {
+        Queue::fake();
+        Order::query()->delete();
+
+        try {
+            $this->service->create($this->user, $this->dto());
+            $this->fail('An empty export must be refused.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('data', $e->errors());
+        }
+
+        Queue::assertNothingPushed();
+        $this->assertSame(0, $this->slots(), 'the slot is freed');
+    }
+
     public function test_definition_returns_the_exportable_and_rejects_an_unknown_key(): void
     {
         $this->assertInstanceOf(OrderExportable::class, $this->service->definition('orders'));
@@ -91,6 +107,7 @@ final class StartExportTest extends TestCase
 
     public function test_quota_refuses_the_export_over_the_limit_and_keeps_the_slots(): void
     {
+        Order::create(['number' => 'A', 'total' => 1]);
         Queue::fake();
         config(['export.max_active_per_user' => 2]);
 
@@ -109,6 +126,7 @@ final class StartExportTest extends TestCase
 
     public function test_quota_is_per_owner(): void
     {
+        Order::create(['number' => 'A', 'total' => 1]);
         Queue::fake();
         config(['export.max_active_per_user' => 1]);
 
@@ -129,6 +147,7 @@ final class StartExportTest extends TestCase
 
     public function test_a_slot_expires_after_timeout_plus_margin(): void
     {
+        Order::create(['number' => 'A', 'total' => 1]);
         Queue::fake();
         config(['export.queue.timeout' => 100, 'export.stale_margin_seconds' => 20]);
 
@@ -142,6 +161,7 @@ final class StartExportTest extends TestCase
 
     public function test_a_failed_dispatch_frees_the_slot_and_rethrows(): void
     {
+        Order::create(['number' => 'A', 'total' => 1]);
         $this->app->bind(Dispatcher::class, fn () => throw new RuntimeException('queue down'));
 
         try {

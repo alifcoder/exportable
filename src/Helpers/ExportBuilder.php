@@ -35,6 +35,20 @@ final class ExportBuilder
     }
 
     /**
+     * @param  int|null  $rows  The output row count when the caller already has it ({@see countRows()}).
+     *
+     * @throws ValidationException When the filter selects nothing: an empty file is never produced.
+     */
+    public function assertNotEmpty(Builder $query, ?int $rows = null): void
+    {
+        $empty = $rows !== null ? $rows === 0 : ! (clone $query)->reorder()->exists();
+
+        if ($empty) {
+            throw ValidationException::withMessages(['data' => ['There is no data to export.']]);
+        }
+    }
+
+    /**
      * @param  int|null  $rows  The output row count when the caller already has it ({@see countRows()}); the
      *                          cap is then compared to it instead of being queried again.
      *
@@ -143,12 +157,16 @@ final class ExportBuilder
         }, $children);
     }
 
-    /** Output rows the export will write; approximate when the filter pages the result. */
+    /** Output rows the export will write, within the filter's own window (limit, page) when it has one. */
     public function countRows(ExportPlan $plan, Builder $query): int
     {
-        return $plan->childRelation === null
-            ? (int) (clone $query)->reorder()->setEagerLoads([])->toBase()->getCountForPagination()
-            : $this->outputRows($query, $plan->childRelation);
+        if ($plan->childRelation !== null) {
+            return $this->outputRows($query, $plan->childRelation);
+        }
+
+        $counted = (clone $query)->reorder()->setEagerLoads([])->select($query->getModel()->getQualifiedKeyName())->toBase();
+
+        return (int) $query->getModel()->getConnection()->query()->fromSub($counted, 'counted')->count();
     }
 
     private function hasKeyColumn(Model $model): bool

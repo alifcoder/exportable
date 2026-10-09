@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3
+
+- `create()` refuses an export that selects nothing with a `data` validation error (422) before a job is queued; an empty file is never produced.
+- Fixed: the row count (progress total, row cap) honours the filter's own window (limit, page); it used to count every row.
+
 ## 0.3.2
 
 - Progress ends with a final `100` event once the last row is written (it used to stop below 100).
