@@ -1,5 +1,5 @@
 {
-  "name": "alifcoder/export-sdk",
+  "name": "alifcoder/exportable",
   "description": "Async document export (csv/xlsx) for Laravel with alifcoder/query-filter",
   "type": "library",
   "license": "proprietary",

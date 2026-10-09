@@ -1,4 +1,4 @@
-# alifcoder/export-sdk
+# alifcoder/exportable
 
 Async document export (csv, xlsx) for Laravel, built on `alifcoder/query-filter` (`^2.0.1`, enforced by Composer).
 
@@ -8,7 +8,7 @@ The package is host-driven and **stateless**: it ships **no routes, no controlle
 The host's endpoint calls `ExportServiceInterface::create($owner, $dto)`: it takes a quota slot (cache), applies the host filter, counts the output rows once (cap and progress total) and queues `RunExport` with an `ExportTask` (id, owner id, locale, request, row total). The host authorises the owner before calling (`definition()` and `create()` check nothing but the key). The job passes through the host's `queue.middleware`, which signs the owner in (so the host filter's `before()` scope applies) and re-checks the permission, then streams rows with `lazy()`, flattens children, writes a **local temporary file**, hands it to the host's `ExportFileStore` (e.g. as an attachment), removes the temporary file, frees the quota slot and dispatches `ExportFinished` (completed or failed, with an error code). While it runs, `ExportProgressed` events tell the owner's client how far it is. Nothing is persisted by the package; the host keeps whatever it needs from `ExportFinished`.
 
 ## Install
-1. `composer require alifcoder/export-sdk`
+1. `composer require alifcoder/exportable`
 2. `php artisan vendor:publish --tag=export-config`, set **every** key in `config/export.php` (a missing one fails with `Missing export configuration "export.<key>"`).
 3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id). Links, listing and deletion are the host's. There is no auth contract and no gate/ability/guard setting.
 4. Write your own endpoints over `Services\Interfaces\ExportServiceInterface` (`definition($key)`, `create($owner, $dto)`), authorise the user there, and listen to `ExportFinished`.
