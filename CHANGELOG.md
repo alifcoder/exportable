@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+Breaking:
+
+- `ExportProgressed` broadcasts on the owner's `App.Models.User.{id}` private channel instead of `exports.{ownerId}`.
+- New required config keys `style.csv.{delimiter,enclosure,line_ending,bom}`; the csv layout was hard-coded before.
+
 ## 0.3.3
 
 - `create()` refuses an export that selects nothing with a `data` validation error (422) before a job is queued; an empty file is never produced.

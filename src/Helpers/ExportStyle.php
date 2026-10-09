@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
-/** Typed reader of the host's `export.style` settings: date formats, fonts, header look, number formats, widths. */
+/** Typed reader of the host's `export.style` settings: date formats, csv layout, fonts, header look, number formats, widths. */
 final readonly class ExportStyle
 {
     public function dateFormat(): string
@@ -15,6 +15,30 @@ final readonly class ExportStyle
     public function dateTimeFormat(): string
     {
         return ExportConfig::string('style.datetime_format');
+    }
+
+    /** Single-byte field separator of csv files. */
+    public function csvDelimiter(): string
+    {
+        return ExportConfig::string('style.csv.delimiter');
+    }
+
+    /** Single-byte quote character of csv fields. */
+    public function csvEnclosure(): string
+    {
+        return ExportConfig::string('style.csv.enclosure');
+    }
+
+    /** Line ending written after every csv row. */
+    public function csvLineEnding(): string
+    {
+        return ExportConfig::string('style.csv.line_ending');
+    }
+
+    /** Whether csv files start with a UTF-8 byte order mark (Excel needs it to read UTF-8). */
+    public function csvBom(): bool
+    {
+        return ExportConfig::bool('style.csv.bom');
     }
 
     public function fontName(): string

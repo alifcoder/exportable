@@ -55,6 +55,15 @@ return [
         'date_format' => 'Y-m-d',
         'datetime_format' => 'Y-m-d H:i:s',
 
+        'csv' => [
+            // Single-byte characters.
+            'delimiter' => ',',
+            'enclosure' => '"',
+            'line_ending' => "\n",
+            // UTF-8 byte order mark; Excel needs it to open UTF-8 csv correctly.
+            'bom' => true,
+        ],
+
         'xlsx' => [
             'font' => ['name' => 'Calibri', 'size' => 11],
             'header' => [

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers\Writers;
 
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportStyle;
 
 final class CsvWriter implements Writer
 {
     private const array FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r"];
+
+    public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
     public function write(string $title, array $headings, array $numeric, iterable $rows, string $path): int
     {
@@ -18,13 +21,20 @@ final class CsvWriter implements Writer
             throw ExportException::storageWriteFailed("cannot open $path");
         }
 
+        $delimiter = $this->style->csvDelimiter();
+        $enclosure = $this->style->csvEnclosure();
+        $lineEnding = $this->style->csvLineEnding();
+
         try {
-            fwrite($file, "\xEF\xBB\xBF");
-            fputcsv($file, $headings, ',', '"', '');
+            if ($this->style->csvBom()) {
+                fwrite($file, "\xEF\xBB\xBF");
+            }
+
+            fputcsv($file, $headings, $delimiter, $enclosure, '', $lineEnding);
 
             $count = 0;
             foreach ($rows as $row) {
-                fputcsv($file, $this->guard($row, $numeric), ',', '"', '');
+                fputcsv($file, $this->guard($row, $numeric), $delimiter, $enclosure, '', $lineEnding);
                 $count++;
             }
 

@@ -11,7 +11,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 
 /**
  * How far a running export is, for the owner's client. Sent only when `export.progress.enabled` is on and the
- * export is at least `export.progress.min_rows` rows. The host authorises the `exports.{ownerId}` private channel.
+ * export is at least `export.progress.min_rows` rows. It goes to the owner's `App.Models.User.{id}` private channel, which the host already authorises.
  */
 final class ExportProgressed implements ShouldBroadcastNow
 {
@@ -28,7 +28,7 @@ final class ExportProgressed implements ShouldBroadcastNow
 
     public function broadcastOn(): PrivateChannel
     {
-        return new PrivateChannel('exports.'.$this->ownerId);
+        return new PrivateChannel('App.Models.User.'.$this->ownerId);
     }
 
     public function broadcastAs(): string

@@ -33,7 +33,7 @@ The host's endpoint calls `ExportServiceInterface::create($owner, $dto)`: it tak
    }
    ```
 6. Run a queue worker for `queue.name` with enough memory/timeout for xlsx. The queue connection's `retry_after` must exceed `queue.timeout`, otherwise a second worker picks up the running job. The quota needs a cache store with atomic locks. Discovered `ResourceExportable` columns are cached for 10 minutes in the default cache store.
-7. Authorize the private channel `exports.{ownerId}` if you use progress events.
+7. Authorize the private channel `App.Models.User.{id}` (Laravel's default user channel) if you use progress events.
 
 ## Documents: extend the registry
 Nothing is declared per document. Bind a subclass of `Helpers\ExportRegistry` and override `keys()`, `has($key)` and `get($key): Exportable`; return a `Helpers\ResourceExportable` built from a model, its API resource, a filter closure and a base-query closure (both receive the request's `data` parameters; the base query is where the host's own list defaults belong) and the columns are discovered from the resource output (`business_partner.name`), the children from its HasMany list (`products`). Hand-written `Contracts\Exportable` classes still work (`register`, `registerUsing`); they implement `query(array $parameters)` for the base query.
@@ -63,15 +63,16 @@ Errors raised by the service: `ValidationException` (filter / row cap), `ExportE
 | `events.finished` | dispatch `ExportFinished` when an export completes or fails; `false` silences it |
 | `progress.{enabled,min_rows,step_percent}` | broadcast `ExportProgressed` for exports of at least `min_rows` rows, at most every `step_percent` points, and a final 100 once the last row is written (the finished event then announces the file) |
 | `style.{date_format,datetime_format}` | PHP `date()` formats; `Column::date()` uses `date_format` |
+| `style.csv.{delimiter,enclosure,line_ending,bom}` | csv field separator and quote (single byte), row ending, UTF-8 byte order mark |
 | `style.xlsx.font`, `.header`, `.number_format`, `.integer_format`, `.column_width` | font, header look (ARGB colours), Excel number formats, width = heading length + padding clamped to min..max |
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.
-- `ExportProgressed` (`ShouldBroadcastNow`, private channel `exports.{ownerId}`, `export.progressed`): `id`, `percent`, `rows`, `total_rows`.
+- `ExportProgressed` (`ShouldBroadcastNow`, private channel `App.Models.User.{ownerId}`, `export.progressed`): `id`, `percent`, `rows`, `total_rows`.
 
 ## Layout and safety
 - Children are flattened: one row per child with document columns repeated; a document without children yields one row with blank child cells. Output order: `columns` then `child_columns`.
-- Caps count output rows. csv: formula-prefix guard on non-numeric columns, UTF-8 BOM. xlsx: non-numeric cells are inert strings.
+- Caps count output rows. csv: formula-prefix guard on non-numeric columns; layout (delimiter, enclosure, line ending, BOM) from `style.csv`. xlsx: non-numeric cells are inert strings.
 - bool is `1`/`0`; override per column with a closure.
 - Lazy loading is blocked while exporting: columns declare the relations they need (`Column::make(...)->relations('customer')`; constrained loads such as `['lines' => fn ($q) => ...]` are accepted); `ResourceExportable` takes them from the host's `$with` list.
 
