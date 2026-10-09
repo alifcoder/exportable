@@ -60,7 +60,7 @@ final class ExportBuilderValuesTest extends TestCase
                 return [];
             }
 
-            public function query(): Builder
+            public function query(array $parameters): Builder
             {
                 return $this->query ? ($this->query)() : Order::query();
             }

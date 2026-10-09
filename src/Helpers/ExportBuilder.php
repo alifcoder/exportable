@@ -17,10 +17,12 @@ use Illuminate\Validation\ValidationException;
 
 final class ExportBuilder
 {
+    public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
+
     /** Apply the host filter, then own eager loading and ordering. */
     public function query(ExportPlan $plan): Builder
     {
-        $builder = $plan->exportable->query();
+        $builder = $plan->exportable->query($plan->dto->parameters);
         $this->assertChildRelation($plan, $builder);
         $plan->exportable->filter($plan->dto->parameters)->apply($builder);
 
@@ -31,15 +33,22 @@ final class ExportBuilder
         return $builder;
     }
 
-    /** @throws ValidationException */
-    public function assertWithinCap(ExportPlan $plan, Builder $query): void
+    /**
+     * @param  int|null  $rows  The output row count when the caller already has it ({@see countRows()}); the
+     *                          cap is then compared to it instead of being queried again.
+     *
+     * @throws ValidationException
+     */
+    public function assertWithinCap(ExportPlan $plan, Builder $query, ?int $rows = null): void
     {
         $cap = $plan->dto->format->maxRows();
 
-        // With children the output row count is at least the document count, so one count query covers both.
-        $exceeds = $plan->childRelation === null
-            ? (clone $query)->reorder()->offset($cap)->limit(1)->exists()
-            : $this->outputRows($query, $plan->childRelation) > $cap;
+        $exceeds = match (true) {
+            $rows !== null => $rows > $cap,
+            $plan->childRelation === null => (clone $query)->reorder()->offset($cap)->limit(1)->exists(),
+            // With children the output row count is at least the document count, so one count query covers both.
+            default => $this->outputRows($query, $plan->childRelation) > $cap,
+        };
 
         if ($exceeds) {
             throw ValidationException::withMessages([
@@ -92,7 +101,7 @@ final class ExportBuilder
             $keys[(string) $record->{$keyName}] ??= $record->{$keyName};
         }
 
-        foreach (array_chunk(array_values($keys), max(1, (int) config('export.chunk_size', 500))) as $chunk) {
+        foreach (array_chunk(array_values($keys), max(1, ExportConfig::int('chunk_size'))) as $chunk) {
             $load = (clone $query)->reorder()->whereKey($chunk);
             // The snapshot already applied the filter's window; paging it again would truncate the chunk.
             $load->getQuery()->limit = null;
@@ -131,6 +140,14 @@ final class ExportBuilder
 
             return [...$base, ...$this->values($plan->childColumns, $child)];
         }, $children);
+    }
+
+    /** Output rows the export will write; approximate when the filter pages the result. */
+    public function countRows(ExportPlan $plan, Builder $query): int
+    {
+        return $plan->childRelation === null
+            ? (int) (clone $query)->reorder()->setEagerLoads([])->toBase()->getCountForPagination()
+            : $this->outputRows($query, $plan->childRelation);
     }
 
     /** Output rows when children are flattened: one per child, or one for a childless document. */
@@ -174,17 +191,25 @@ final class ExportBuilder
         $loads = [];
 
         foreach ($plan->columns as $column) {
-            foreach ($column->getRelations() as $relation) {
-                $loads[$relation] ??= null;
+            foreach ($column->getRelations() as $relation => $constraint) {
+                $loads[$relation] ??= $constraint;
             }
         }
 
         if ($plan->childRelation !== null) {
-            $loads[$plan->childRelation] = fn ($query) => $query->orderBy($query->getModel()->getQualifiedKeyName());
+            // A column may constrain the child relation itself; the child order is added on top of it.
+            $constrained = $loads[$plan->childRelation] ?? null;
+            $loads[$plan->childRelation] = function ($query) use ($constrained): void {
+                if ($constrained !== null) {
+                    $constrained($query);
+                }
+
+                $query->orderBy($query->getModel()->getQualifiedKeyName());
+            };
 
             foreach ($plan->childColumns as $column) {
-                foreach ($column->getRelations() as $relation) {
-                    $loads["{$plan->childRelation}.{$relation}"] ??= null;
+                foreach ($column->getRelations() as $relation => $constraint) {
+                    $loads["{$plan->childRelation}.{$relation}"] ??= $constraint;
                 }
             }
         }
@@ -206,18 +231,18 @@ final class ExportBuilder
         $values = [];
 
         foreach ($columns as $key => $column) {
-            $values[] = $this->normalize($column->resolve($model, $key), $key);
+            $values[] = $this->normalize($column->resolve($model, $key), $key, $column->isDate());
         }
 
         return $values;
     }
 
-    private function normalize(mixed $value, string $key): string|int|float|null
+    private function normalize(mixed $value, string $key, bool $date): string|int|float|null
     {
         return match (true) {
             $value === null => null,
             $value instanceof BackedEnum => $value->value,
-            $value instanceof CarbonInterface => $value->format('Y-m-d H:i:s'),
+            $value instanceof CarbonInterface => $value->format($date ? $this->style->dateFormat() : $this->style->dateTimeFormat()),
             is_bool($value) => $value ? '1' : '0',
             is_scalar($value) => $value,
             default => throw ExportException::invalidColumnValue($key),

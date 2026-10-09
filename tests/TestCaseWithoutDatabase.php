@@ -14,4 +14,9 @@ abstract class TestCaseWithoutDatabase extends Orchestra
     {
         return [ExportServiceProvider::class];
     }
+
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('export', require __DIR__.'/../config/export.php');
+    }
 }

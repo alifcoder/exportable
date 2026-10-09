@@ -25,7 +25,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
     /** @param list<list<mixed>> $rows */
     private function csv(array $headings, array $numeric, iterable $rows, string $path = 'o.csv'): string
     {
-        (new CsvWriter)->write('t', $headings, $numeric, $rows, 'local', $path);
+        (new CsvWriter)->write('t', $headings, $numeric, $rows, Storage::disk('local')->path($path));
 
         return substr(Storage::disk('local')->get($path), 3);
     }
@@ -33,7 +33,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
     /** @param list<list<mixed>> $rows */
     private function sheet(array $headings, array $numeric, iterable $rows, int &$count = 0): Worksheet
     {
-        $count = (new XlsxWriter)->write('t', $headings, $numeric, $rows, 'local', 'o.xlsx');
+        $count = (new XlsxWriter)->write('t', $headings, $numeric, $rows, Storage::disk('local')->path('o.xlsx'));
 
         return IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
     }
@@ -42,7 +42,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_with_no_rows_has_bom_and_header_only_and_returns_zero(): void
     {
-        $count = (new CsvWriter)->write('t', ['A', 'B'], [false, false], [], 'local', 'o.csv');
+        $count = (new CsvWriter)->write('t', ['A', 'B'], [false, false], [], Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(0, $count);
         $this->assertSame("\xEF\xBB\xBFA,B\n", Storage::disk('local')->get('o.csv'));
@@ -114,7 +114,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
             }
         })();
 
-        $count = (new CsvWriter)->write('t', ['h'], [false], $gen, 'local', 'o.csv');
+        $count = (new CsvWriter)->write('t', ['h'], [false], $gen, Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(2500, $count);
         $this->assertCount(2501, explode("\n", trim(Storage::disk('local')->get('o.csv'))));
@@ -127,30 +127,6 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
         $this->assertStringNotContainsString('first', $out);
         $this->assertStringContainsString('second', $out);
-    }
-
-    public function test_csv_generator_failure_writes_no_file(): void
-    {
-        $gen = (function (): Generator {
-            yield ['ok'];
-
-            throw new \RuntimeException('boom');
-        })();
-
-        try {
-            (new CsvWriter)->write('t', ['h'], [false], $gen, 'local', 'partial.csv');
-            $this->fail('Expected RuntimeException');
-        } catch (\RuntimeException) {
-        }
-
-        Storage::disk('local')->assertMissing('partial.csv');
-    }
-
-    public function test_csv_stores_inside_nested_directories(): void
-    {
-        $this->csv(['h'], [false], [['x']], 'exports/deep/o.csv');
-
-        Storage::disk('local')->assertExists('exports/deep/o.csv');
     }
 
     // ---- xlsx --------------------------------------------------------------
@@ -254,22 +230,36 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
         $this->assertEquals(1500, $sheet->getCell('A1501')->getValue());
     }
 
-    public function test_xlsx_temp_file_is_removed_even_when_the_rows_fail(): void
+    public function test_xlsx_row_failure_propagates(): void
     {
-        $before = glob(sys_get_temp_dir().'/export_xlsx_*') ?: [];
         $gen = (function (): Generator {
             yield ['x'];
 
             throw new \RuntimeException('boom');
         })();
 
-        try {
-            (new XlsxWriter)->write('t', ['h'], [false], $gen, 'local', 'o.xlsx');
-            $this->fail('Expected RuntimeException');
-        } catch (\RuntimeException) {
-        }
+        $this->expectException(\RuntimeException::class);
+        (new XlsxWriter)->write('t', ['h'], [false], $gen, Storage::disk('local')->path('o.xlsx'));
+    }
 
-        $this->assertSame($before, glob(sys_get_temp_dir().'/export_xlsx_*') ?: []);
-        Storage::disk('local')->assertMissing('o.xlsx');
+    public function test_xlsx_uses_the_configured_formats_header_style_and_widths(): void
+    {
+        config([
+            'export.style.xlsx.number_format' => '0.0',
+            'export.style.xlsx.integer_format' => '0000',
+            'export.style.xlsx.header.background' => 'FFFF0000',
+            'export.style.xlsx.header.bold' => true,
+            'export.style.xlsx.column_width' => ['min' => 12, 'max' => 20, 'padding' => 2],
+        ]);
+
+        (new XlsxWriter)->write('t', ['Short', 'A very very long heading indeed'], [true, true], [[7, 1.5]], Storage::disk('local')->path('o.xlsx'));
+        $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
+
+        $this->assertSame('0000', $sheet->getStyle('A2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('0.0', $sheet->getStyle('B2')->getNumberFormat()->getFormatCode());
+        $this->assertTrue($sheet->getStyle('A1')->getFont()->getBold());
+        $this->assertSame('FFFF0000', $sheet->getStyle('A1')->getFill()->getStartColor()->getARGB());
+        $this->assertEqualsWithDelta(12, $sheet->getColumnDimension('A')->getWidth(), 0.5);
+        $this->assertEqualsWithDelta(20, $sheet->getColumnDimension('B')->getWidth(), 0.5);
     }
 }

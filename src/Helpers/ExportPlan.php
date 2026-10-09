@@ -7,6 +7,7 @@ namespace Alif\Export\Helpers;
 use Alif\Export\Contracts\Exportable;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\Exceptions\ExportException;
+use Illuminate\Support\Str;
 
 /** What one export will read and write, resolved once from the definition and the export DTO. */
 final readonly class ExportPlan
@@ -23,36 +24,46 @@ final readonly class ExportPlan
         public array $childColumns,
     ) {}
 
-    /** @throws ExportException When a requested column is not in the definition (it changed after the request). */
-    public static function for(Exportable $exportable, ExportCreateDTO $dto): self
+    /**
+     * @param  bool  $lenient  A column missing from the definition becomes an empty column labelled by its key
+     *                         instead of an error: the writer of an accepted request must not fail because a
+     *                         discovered definition changed in between.
+     *
+     * @throws ExportException When a requested column is not in the definition and $lenient is false.
+     */
+    public static function for(Exportable $exportable, ExportCreateDTO $dto, bool $lenient = false): self
     {
         $childRelation = $dto->includeChildren ? $exportable->childRelation() : null;
 
         return new self(
             $exportable,
             $dto,
-            self::pick($exportable->columns(), $dto->columns),
+            self::pick($exportable->columns(), $dto->columns, $lenient),
             $childRelation,
-            $childRelation === null ? [] : self::pick($exportable->childColumns(), $dto->childColumns),
+            $childRelation === null ? [] : self::pick($exportable->childColumns(), $dto->childColumns, $lenient),
         );
     }
 
     /** @return list<string> */
     public function headings(): array
     {
-        return array_values(array_map(fn (Column $column): string => (string) __($column->label()), $this->allColumns()));
+        return array_map(fn (Column $column): string => (string) __($column->label()), $this->allColumns());
     }
 
     /** @return list<bool> */
     public function numeric(): array
     {
-        return array_values(array_map(fn (Column $column): bool => $column->isNumeric(), $this->allColumns()));
+        return array_map(fn (Column $column): bool => $column->isNumeric(), $this->allColumns());
     }
 
-    /** @return array<string, Column> */
+    /**
+     * Document columns then child columns, positionally: a child column may share its key with a document column.
+     *
+     * @return list<Column>
+     */
     private function allColumns(): array
     {
-        return [...$this->columns, ...$this->childColumns];
+        return [...array_values($this->columns), ...array_values($this->childColumns)];
     }
 
     /**
@@ -60,12 +71,13 @@ final readonly class ExportPlan
      * @param  list<string>  $keys
      * @return array<string, Column>
      */
-    private static function pick(array $available, array $keys): array
+    private static function pick(array $available, array $keys, bool $lenient): array
     {
         $picked = [];
 
         foreach ($keys as $key) {
-            $picked[$key] = $available[$key] ?? throw ExportException::unknownColumn($key);
+            $picked[$key] = $available[$key]
+                ?? ($lenient ? Column::make(Str::headline(str_replace('.', ' ', $key))) : throw ExportException::unknownColumn($key));
         }
 
         return $picked;

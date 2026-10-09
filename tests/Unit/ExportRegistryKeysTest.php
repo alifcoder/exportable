@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Unit;
 
+use Alif\Export\Contracts\Exportable;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Tests\Fixtures\OrderExportable;
@@ -126,12 +127,47 @@ final class ExportRegistryKeysTest extends TestCaseWithoutDatabase
         $this->assertSame(['b', 'a'], $registry->keys());
     }
 
-    public function test_bad_config_registration_fails_when_the_registry_is_resolved(): void
+    public function test_a_subclass_can_resolve_keys_dynamically(): void
     {
-        config(['export.exportables' => ['Bad Key' => OrderExportable::class]]);
-        $this->app->forgetInstance(ExportRegistry::class);
+        $registry = new class(app()) extends ExportRegistry
+        {
+            public function keys(): array
+            {
+                return ['dyn.orders'];
+            }
+
+            public function has(string $key): bool
+            {
+                return $key === 'dyn.orders';
+            }
+
+            public function get(string $key): Exportable
+            {
+                return new OrderExportable;
+            }
+        };
+
+        $this->assertTrue($registry->has('dyn.orders'));
+        $this->assertFalse($registry->has('other'));
+        $this->assertInstanceOf(OrderExportable::class, $registry->get('dyn.orders'));
+    }
+
+    public function test_a_factory_is_built_once_and_counts_as_registered(): void
+    {
+        $registry = new ExportRegistry(app());
+        $built = 0;
+        $registry->registerUsing('lazy.orders', function () use (&$built): Exportable {
+            $built++;
+
+            return new OrderExportable;
+        });
+
+        $this->assertTrue($registry->has('lazy.orders'));
+        $this->assertSame(['lazy.orders'], $registry->keys());
+        $this->assertSame($registry->get('lazy.orders'), $registry->get('lazy.orders'));
+        $this->assertSame(1, $built);
 
         $this->expectException(ExportException::class);
-        app(ExportRegistry::class);
+        $registry->registerUsing('lazy.orders', fn (): Exportable => new OrderExportable);
     }
 }

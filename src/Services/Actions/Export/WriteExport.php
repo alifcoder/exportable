@@ -5,57 +5,59 @@ declare(strict_types=1);
 namespace Alif\Export\Services\Actions\Export;
 
 use Alif\Export\Contracts\ExportAuth;
-use Alif\Export\DTO\Export\ExportCreateDTO;
-use Alif\Export\Entities\DataExport;
+use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportPlan;
+use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Helpers\ExportWriter;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 
-/** Writes the file of a claimed export, signed in as its owner so the host filter's scope applies. */
-final readonly class GenerateExport
+/** Writes the file of a task, signed in as its owner so the host filter's scope applies. */
+final readonly class WriteExport
 {
     public function __construct(
         private ExportAuth $auth,
         private ExportRegistry $registry,
         private ExportBuilder $builder,
         private ExportWriter $writer,
+        private ExportProgress $progress,
     ) {}
 
     /**
+     * @param  string  $path  Local file to write.
      * @return int Rows written.
      *
      * @throws ExportException
      */
-    public function __invoke(DataExport $export): int
+    public function __invoke(ExportTask $task, string $path): int
     {
         $previousLocale = App::getLocale();
-        App::setLocale($export->locale);
+        App::setLocale($task->locale);
 
         try {
             return $this->auth->actingAs(
-                $export->owner_id,
-                fn (Authenticatable $owner): int => $this->write($export, $owner),
+                $task->ownerId,
+                fn (Authenticatable $owner): int => $this->write($task, $owner, $path),
             );
         } finally {
             App::setLocale($previousLocale);
         }
     }
 
-    private function write(DataExport $export, Authenticatable $owner): int
+    private function write(ExportTask $task, Authenticatable $owner, string $path): int
     {
-        $dto = ExportCreateDTO::fromArray($export->options);
+        $dto = $task->request;
 
         if (! $this->auth->allows($owner, $dto->exportable)) {
             throw ExportException::forbidden();
         }
 
         $exportable = $this->registry->get($dto->exportable);
-        $plan = ExportPlan::for($exportable, $dto);
+        $plan = ExportPlan::for($exportable, $dto, lenient: true);
         $previous = Model::preventsLazyLoading();
         Model::preventLazyLoading();
 
@@ -65,9 +67,8 @@ final readonly class GenerateExport
                 $dto->title ?? (string) __($exportable->title()),
                 $plan->headings(),
                 $plan->numeric(),
-                $this->builder->rows($plan, $this->builder->query($plan)),
-                (string) $export->disk,
-                (string) $export->path,
+                $this->progress->track($task, $this->builder->rows($plan, $this->builder->query($plan))),
+                $path,
             );
         } finally {
             Model::preventLazyLoading($previous);

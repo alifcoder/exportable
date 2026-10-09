@@ -5,34 +5,32 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers\Writers;
 
 use Alif\Export\Exceptions\ExportException;
-use Illuminate\Support\Facades\Storage;
 
 final class CsvWriter implements Writer
 {
     private const array FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r"];
 
-    public function write(string $title, array $headings, array $numeric, iterable $rows, string $disk, string $path): int
+    public function write(string $title, array $headings, array $numeric, iterable $rows, string $path): int
     {
-        $temp = tmpfile();
-        fwrite($temp, "\xEF\xBB\xBF");
-        fputcsv($temp, $headings, ',', '"', '');
+        $file = @fopen($path, 'wb');
+
+        if ($file === false) {
+            throw ExportException::storageWriteFailed("cannot open $path");
+        }
 
         try {
+            fwrite($file, "\xEF\xBB\xBF");
+            fputcsv($file, $headings, ',', '"', '');
+
             $count = 0;
             foreach ($rows as $row) {
-                fputcsv($temp, $this->guard($row, $numeric), ',', '"', '');
+                fputcsv($file, $this->guard($row, $numeric), ',', '"', '');
                 $count++;
-            }
-
-            rewind($temp);
-
-            if (! Storage::disk($disk)->writeStream($path, $temp)) {
-                throw ExportException::storageWriteFailed($disk, $path);
             }
 
             return $count;
         } finally {
-            fclose($temp);
+            fclose($file);
         }
     }
 

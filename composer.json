@@ -7,7 +7,6 @@
     "php": "^8.3",
     "alifcoder/query-filter": "^2.0.1",
     "illuminate/auth": "^13.0",
-    "illuminate/console": "^13.0",
     "illuminate/database": "^13.0",
     "illuminate/http": "^13.0",
     "illuminate/queue": "^13.0",

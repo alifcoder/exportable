@@ -9,7 +9,7 @@ use Alif\Export\Helpers\Column;
 use Alif\QueryFilter\Interfaces\EBFilterInterface;
 use Illuminate\Database\Eloquent\Builder;
 
-final class OrderExportable implements Exportable
+class OrderExportable implements Exportable
 {
     public function title(): string
     {
@@ -40,7 +40,7 @@ final class OrderExportable implements Exportable
         ];
     }
 
-    public function query(): Builder
+    public function query(array $parameters): Builder
     {
         return Order::query();
     }

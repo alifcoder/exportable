@@ -32,7 +32,7 @@ final class PlainOrderExportable implements Exportable
         return [];
     }
 
-    public function query(): Builder
+    public function query(array $parameters): Builder
     {
         return Order::query();
     }

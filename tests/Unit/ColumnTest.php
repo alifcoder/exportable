@@ -29,7 +29,7 @@ final class ColumnTest extends TestCase
     {
         $column = Column::make('x')->relations('a', 'b', 'a')->relations('b', 'c.d');
 
-        $this->assertSame(['a', 'b', 'c.d'], $column->getRelations());
+        $this->assertSame(['a' => null, 'b' => null, 'c.d' => null], $column->getRelations());
     }
 
     public function test_without_closure_resolves_the_attribute_named_by_the_key(): void

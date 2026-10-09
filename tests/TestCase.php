@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests;
 
+use Alif\Export\Contracts\ExportAuth;
+use Alif\Export\Contracts\ExportFileStore;
 use Alif\Export\Providers\ExportServiceProvider;
+use Alif\Export\Tests\Fixtures\DiskFileStore;
+use Alif\Export\Tests\Fixtures\GateExportAuth;
 use Alif\Export\Tests\Fixtures\User;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -37,9 +41,13 @@ abstract class TestCase extends Orchestra
         $app['config']->set('queue.default', 'sync');
         $app['config']->set('filesystems.default', 'local');
         $app['config']->set('auth.providers.users.model', User::class);
-        $app['config']->set('export.routes.middleware', ['api', 'auth:web']);
-        $app['config']->set('export.guard', 'web');
+        // The package ships no defaults; the tests use the published stub as the host configuration.
+        $app['config']->set('export', require __DIR__.'/../config/export.php');
         $app['config']->set('export.queue.name', null);
+        $app['config']->set('export.ttl_hours', 24);
+
+        $app->bind(ExportAuth::class, GateExportAuth::class);
+        $app->bind(ExportFileStore::class, DiskFileStore::class);
     }
 
     protected function tearDown(): void
@@ -53,7 +61,7 @@ abstract class TestCase extends Orchestra
     private function dropPersistentTables(): void
     {
         if (config('database.default') === 'pgsql') {
-            foreach (['data_exports', 'order_lines', 'orders', 'users'] as $table) {
+            foreach (['order_lines', 'orders', 'users'] as $table) {
                 Schema::dropIfExists($table);
             }
         }
@@ -86,8 +94,5 @@ abstract class TestCase extends Orchestra
             $t->integer('qty')->default(1);
             $t->timestamps();
         });
-
-        $migration = include __DIR__.'/../database/migrations/create_data_exports_table.php.stub';
-        $migration->up();
     }
 }

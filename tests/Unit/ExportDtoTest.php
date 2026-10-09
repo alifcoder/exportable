@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\DTO\Export\ExportCreateDTO;
-use Alif\Export\DTO\Export\ExportDownloadDTO;
-use Alif\Export\DTO\Export\ExportListDTO;
+use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Enums\ExportFormat;
-use Alif\Export\Enums\ExportStatus;
 use PHPUnit\Framework\TestCase;
 use ValueError;
 
@@ -79,29 +77,20 @@ final class ExportDtoTest extends TestCase
         $this->assertFalse(ExportCreateDTO::fromArray($data)->includeChildren);
     }
 
-    public function test_list_dto_defaults(): void
+    public function test_task_round_trips_through_a_scalar_array(): void
     {
-        $dto = new ExportListDTO('owner-1');
+        $task = new ExportTask('id-1', 'owner-1', 'uz', ExportCreateDTO::fromArray($this->row()), 42);
 
-        $this->assertSame('owner-1', $dto->ownerId);
-        $this->assertNull($dto->status);
-        $this->assertNull($dto->exportable);
-        $this->assertSame(20, $dto->perPage);
+        $array = $task->toArray();
+
+        $this->assertSame($array, json_decode((string) json_encode($array), true));
+        $this->assertEquals($task, ExportTask::fromArray($array));
     }
 
-    public function test_list_dto_carries_filters(): void
+    public function test_task_total_rows_may_be_unknown(): void
     {
-        $dto = new ExportListDTO('o', ExportStatus::FAILED, 'orders', 5);
+        $task = new ExportTask('id-1', 'owner-1', 'en', ExportCreateDTO::fromArray($this->row()), null);
 
-        $this->assertSame(ExportStatus::FAILED, $dto->status);
-        $this->assertSame('orders', $dto->exportable);
-        $this->assertSame(5, $dto->perPage);
-    }
-
-    public function test_download_dto_carries_its_four_fields(): void
-    {
-        $dto = new ExportDownloadDTO('local', 'exports/a.csv', 'orders.csv', 'text/csv');
-
-        $this->assertSame(['local', 'exports/a.csv', 'orders.csv', 'text/csv'], [$dto->disk, $dto->path, $dto->fileName, $dto->mimeType]);
+        $this->assertNull(ExportTask::fromArray($task->toArray())->totalRows);
     }
 }

@@ -38,7 +38,7 @@ final class TranslatedOrderExportable implements Exportable
         ];
     }
 
-    public function query(): Builder
+    public function query(array $parameters): Builder
     {
         return Order::query();
     }

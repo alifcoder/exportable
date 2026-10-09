@@ -2,17 +2,20 @@
 
 ## Unreleased
 
-- Breaking: restructured into layers following erp-backend. Namespaces moved: `Column`, `ExportRegistry`, `ExportBuilder`, `ExportPlan`, `ExportWriter`, `Writers\*` → `Helpers\*`; `Models\DataExport` → `Entities\DataExport`; `ExportException` → `Exceptions\ExportException`; `ExportOptions` → `DTO\Export\ExportCreateDTO`; `ExportServiceProvider` → `Providers\ExportServiceProvider`; `Http\ExportResource` → `Transformers\Export\ExportResource`; `Actions\*` → `Services\Actions\Export\*` (invokable: `$action(...)` instead of `->handle(...)`). `DataExport` is now persistence only (guard, casts, `stale` / `active` scopes, prune hooks): `STATUS_*` constants are the `Enums\ExportStatus` enum (cast on `status`), and the behaviour moved out: `claim` / `markCompleted` / `markFailed` / `deleteIfIdle` → `Services\Actions\Export\{Claim,Complete,Fail,Delete}Export`, `isDownloadable` / `isExpired` / `fileExists` → `Helpers\ExportFile`, `exportOptions()` → `ExportCreateDTO::fromArray($export->options)`, `isInFlight()` → `$export->status->isInFlight()`. `ExportFormat` cases are now `CSV` / `XLSX`. Hosts that only register exportables, `Exportable` / `ExportAuth` implementations and `ExportFinished` listeners must update the `Column`, `ExportRegistry` and `DataExport` imports.
-- Controller → `ExportServiceInterface` (bound in the provider) → Actions. Services throw `ExportException` (403/404/409/410/429 via `httpStatus()`), not HTTP aborts; HTTP responses and status codes are unchanged.
-- Breaking: the `pdf` format is removed (csv and xlsx only), together with the `barryvdh/laravel-dompdf` dependency, the `export::pdf` view and `export.max_rows.pdf`. The migration stub's `format` check is now `('csv','xlsx')`; an existing Postgres table keeps the old constraint, which is harmless. Old rows with format `pdf` can no longer be created, so delete them.
-- Fix: a storage disk that returns `false` on write (no `throw`) no longer yields a `completed` export without a file; it fails with `storage_write_failed`.
-- Fix: the submit-time row count uses the exportable model's connection, not the default one.
-- Fix: rows are read from a key snapshot in key chunks instead of offset paging, so data changing during a long export cannot skip or repeat rows (the filter's sort is kept).
-- Fix: key-chunked reading ignores the filter's limit/offset per chunk (applied once to the snapshot) and collapses duplicate keys from joins.
-- Fix: `XlsxWriter` fails with `storage_write_failed` if the temp file cannot be reopened; `storage_write_failed` is reported to the exception handler.
-- Breaking: `definition` answers 403 for an unknown key (was 404), so key existence is not revealed.
-- Breaking: `export.prohibited_parameters` defaults to `[]` (was the host-specific `['all', 'pos_auth_id']`).
-- Docs: drop the stale `incompatible_query_filter` troubleshooting entry.
+Breaking: the package is host-driven and stateless.
+
+- No database table or migration, no HTTP layer (controller, requests, resources), no routes, schedule, pruning, storage disk or config defaults. A missing `export.*` key fails with `invalid_configuration`. The host owns its endpoints, its permission check (`Contracts\ExportAuth`), where files are kept (`Contracts\ExportFileStore`, e.g. attachments) and the list of finished exports.
+- Removed config keys: `guard`, `ability`, `table`, `owner_key_type`, `routes`, `prune`, `exportables`, `data_parameters`, `disk`, `directory`, `stale_pending_hours`.
+- `DTO\Export\ExportTask` is the job payload; `RunExport` takes it as an array. `ExportServiceInterface` is `definition()` and `create()` (returns the task; checks the permission, the quota, the filter and the row cap). `ExportFileStore` is only `put(ExportTask, ...)`.
+- `Contracts\Exportable::query(array $parameters)` replaces `query()`: the host builds the document's base query (default scopes, aggregates, joins) so the file matches its list. `ResourceExportable` takes it as a closure after the filter closure.
+- Quota: one cache slot per export (`export-slot:{owner}:{task}`), expiring `queue.timeout + stale_margin_seconds`. The owner lock is held only while counting and adding a slot; releasing deletes the slot (idempotent, lock-free, safe with a synchronous queue).
+- `ExportFinished` carries `task`, `fileId`, `fileName`, `rows`, `errorCode` and `succeeded()`; it is dispatched once per task and only when `export.events.finished` is true. `ExportProgressed` follows `progress.{enabled,min_rows,step_percent}`.
+- `ExportRegistry` is extendable (`keys`/`has`/`get`, `registerUsing`); `Helpers\ResourceExportable` derives columns and children from a model's API resource and filter. Column discovery is deterministic (rows ordered by key, a blank model for nested objects, nested keys win over a flat null, table columns for an empty table) and the discovered keys are cached for 10 minutes so the request and the worker agree. A column missing from the definition when the worker runs is written as an empty column.
+- `Column::relations()` and `ResourceExportable`'s `$with` accept Eloquent `with()` shapes (`name => Closure`); a constraint on the child relation is kept next to the child ordering.
+- The cap and the progress total share one row-count query.
+- `style` config: date and date-time formats, xlsx font, header, number formats, column widths; `Column::date()`. `ttl_hours` is a required setting.
+- Fix: the temporary file is created inside the guarded block, so a failed `tempnam()` still releases the slot.
+- Removed the unused `illuminate/console` requirement.
 
 ## 0.2.0
 

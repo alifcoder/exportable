@@ -4,32 +4,24 @@ declare(strict_types=1);
 
 namespace Alif\Export\Providers;
 
-use Alif\Export\Auth\LaravelExportAuth;
 use Alif\Export\Contracts\ExportAuth;
-use Alif\Export\Entities\DataExport;
+use Alif\Export\Contracts\ExportFileStore;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Services\ExportService;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
-use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
+/**
+ * Registers no routes, no tables, no schedule and no config defaults. The host provides `config/export.php` (see
+ * the published stub), its own endpoints over {@see ExportServiceInterface}, and implementations of
+ * {@see ExportAuth} and {@see ExportFileStore}. To change which
+ * documents exist, bind a subclass of {@see ExportRegistry}.
+ */
 final class ExportServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../../config/export.php', 'export');
-
-        $this->app->singleton(ExportRegistry::class, function ($app): ExportRegistry {
-            $registry = new ExportRegistry($app);
-
-            foreach ((array) config('export.exportables', []) as $key => $class) {
-                $registry->register((string) $key, (string) $class);
-            }
-
-            return $registry;
-        });
-        $this->app->bind(ExportAuth::class, LaravelExportAuth::class);
+        $this->app->singleton(ExportRegistry::class);
         $this->app->bind(ExportServiceInterface::class, ExportService::class);
     }
 
@@ -37,23 +29,6 @@ final class ExportServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../../config/export.php' => config_path('export.php')], 'export-config');
-            $this->publishes([
-                __DIR__.'/../../database/migrations/create_data_exports_table.php.stub' => database_path(
-                    'migrations/'.date('Y_m_d_His').'_create_data_exports_table.php',
-                ),
-            ], 'export-migrations');
-        }
-
-        if (config('export.routes.enabled')) {
-            Route::prefix((string) config('export.routes.prefix'))
-                ->middleware((array) config('export.routes.middleware', []))
-                ->group(__DIR__.'/../../routes/export.php');
-        }
-
-        if (config('export.prune.schedule')) {
-            $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
-                $schedule->command('model:prune', ['--model' => [DataExport::class]])->hourly()->withoutOverlapping();
-            });
         }
     }
 }

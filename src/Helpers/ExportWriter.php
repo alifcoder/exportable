@@ -15,6 +15,7 @@ final class ExportWriter
      * @param  list<string>  $headings
      * @param  list<bool>  $numeric
      * @param  iterable<int, list<string|int|float|null>>  $rows
+     * @param  string  $path  Local file to create.
      * @return int Rows written (excluding the heading row).
      */
     public function store(
@@ -23,10 +24,9 @@ final class ExportWriter
         array $headings,
         array $numeric,
         iterable $rows,
-        string $disk,
         string $path,
     ): int {
-        return $this->writer($format)->write($title, $headings, $numeric, $rows, $disk, $path);
+        return $this->writer($format)->write($title, $headings, $numeric, $rows, $path);
     }
 
     private function writer(ExportFormat $format): Writer

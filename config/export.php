@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
+/*
+ * The package merges no defaults: every key below is required and a missing one fails with
+ * "Missing export configuration". Publish this file and set the values.
+ */
 return [
-    // Documents available for export: key => class implementing Contracts\Exportable. Hosts may also call
-    // app(ExportRegistry::class)->register($key, $class) from a service provider.
-    'exportables' => [],
+    // Hours a finished export stays downloadable.
+    'ttl_hours' => 3,
 
-    // Storage disk for generated files; null uses filesystems.default.
-    'disk' => null,
-    'directory' => 'exports',
-    'ttl_hours' => 24,
+    // Documents loaded per query while writing.
     'chunk_size' => 500,
 
     // Output-row caps per format.
@@ -18,38 +18,54 @@ return [
         'csv' => 500_000,
         'xlsx' => 500_000,
     ],
+
+    // Exports one owner may have pending or processing at once.
     'max_active_per_user' => 3,
 
     'queue' => [
         'connection' => null,
         'name' => 'exports',
-        // Worker retry_after must exceed this value.
+        // Worker retry_after must exceed this value (seconds).
         'timeout' => 1800,
     ],
-    // A processing row whose started_at is older than queue.timeout + this margin is treated as stuck.
+
+    // An active-export slot that is never released (worker killed) expires queue.timeout + this margin
+    // (seconds) after it was taken.
     'stale_margin_seconds' => 600,
-    // A pending row created longer ago than this many hours is treated as stuck (dispatch lost).
-    'stale_pending_hours' => 24,
 
-    // Auth guard used to run the job as the owner; null uses the default guard.
-    'guard' => null,
-    // Gate ability checked as Gate::forUser($user)->allows($ability, [$exportableKey]).
-    'ability' => 'data-export',
-
-    'table' => 'data_exports',
-    // uuid or int.
-    'owner_key_type' => 'uuid',
-
-    // Only these keys of the request "data" object reach the host filter.
-    'data_parameters' => ['filter', 'where', 'search', 'search_type', 'sort', 'with_deleted', 'only_deleted'],
-
-    'routes' => [
-        'enabled' => true,
-        'prefix' => 'exports',
-        'middleware' => ['api', 'auth'],
+    // Dispatch Events\ExportFinished when an export becomes completed or failed (file ready notification).
+    'events' => [
+        'finished' => true,
     ],
 
-    'prune' => [
-        'schedule' => true,
+    // Progress events (Events\ExportProgressed) for the owner's client.
+    'progress' => [
+        'enabled' => true,
+        // Only exports with at least this many output rows report progress.
+        'min_rows' => 1000,
+        // Minimum percentage points between two events.
+        'step_percent' => 5,
+    ],
+
+    'style' => [
+        // PHP date() formats of date values (Column::date() uses date_format, other dates datetime_format).
+        'date_format' => 'Y-m-d',
+        'datetime_format' => 'Y-m-d H:i:s',
+
+        'xlsx' => [
+            'font' => ['name' => 'Calibri', 'size' => 11],
+            'header' => [
+                'bold' => true,
+                'font_size' => 11,
+                // ARGB hex.
+                'font_color' => 'FF000000',
+                'background' => 'FFE8EEF7',
+            ],
+            // Excel number formats of numeric cells.
+            'number_format' => '#,##0.00',
+            'integer_format' => '#,##0',
+            // Column width in characters: heading length + padding, clamped to min..max.
+            'column_width' => ['min' => 10, 'max' => 60, 'padding' => 4],
+        ],
     ],
 ];

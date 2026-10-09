@@ -4,18 +4,19 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services\Actions\Export;
 
+use Alif\Export\Contracts\ExportAuth;
 use Alif\Export\DTO\Export\ExportCreateDTO;
-use Alif\Export\Entities\DataExport;
-use Alif\Export\Enums\ExportStatus;
+use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportPlan;
+use Alif\Export\Helpers\ExportQuota;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -23,56 +24,48 @@ final readonly class StartExport
 {
     public function __construct(
         private ExportRegistry $registry,
+        private ExportAuth $auth,
         private ExportBuilder $builder,
-        private FailExport $failExport,
+        private ExportQuota $quota,
     ) {}
 
     /**
-     * Needs a cache store with atomic locks (redis, database, file, memcached, array): the per-owner lock makes the
-     * quota check and the insert one step, so parallel requests cannot exceed the limit.
-     *
      * @throws ValidationException When the host filter or the row cap rejects the request.
-     * @throws ExportException Too many active exports.
+     * @throws ExportException Forbidden, or too many active exports.
      */
-    public function __invoke(Authenticatable $owner, ExportCreateDTO $dto): DataExport
+    public function __invoke(Authenticatable $owner, ExportCreateDTO $dto): ExportTask
     {
+        if (! $this->registry->has($dto->exportable) || ! $this->auth->allows($owner, $dto->exportable)) {
+            throw ExportException::forbidden();
+        }
+
         $ownerId = (string) $owner->getAuthIdentifier();
+        $taskId = (string) Str::uuid();
 
-        try {
-            return Cache::lock("export-start:{$ownerId}", 30)->block(10, fn (): DataExport => $this->start($ownerId, $dto));
-        } catch (LockTimeoutException) {
-            throw ExportException::tooManyActive();
-        }
-    }
-
-    private function start(string $ownerId, ExportCreateDTO $dto): DataExport
-    {
         // Cheapest check first: a rejected request must not pay for the filter and the row count.
-        $active = DataExport::query()->where('owner_id', $ownerId)->active()->count();
-        if ($active >= (int) config('export.max_active_per_user', 3)) {
-            throw ExportException::tooManyActive();
-        }
-
-        $plan = ExportPlan::for($this->registry->get($dto->exportable), $dto);
-        $this->builder->assertWithinCap($plan, $this->builder->query($plan));
-
-        $export = DataExport::query()->create([
-            'owner_id' => $ownerId,
-            'exportable' => $dto->exportable,
-            'format' => $dto->format->value,
-            'status' => ExportStatus::PENDING,
-            'options' => $dto->toArray(),
-            'locale' => App::getLocale(),
-        ]);
+        $this->quota->reserve($ownerId, $taskId);
 
         try {
-            RunExport::dispatch($export->id);
+            $task = $this->task($taskId, $ownerId, $dto);
+            RunExport::dispatch($task->toArray());
+
+            return $task;
         } catch (Throwable $e) {
-            ($this->failExport)($export, 'export_dispatch_failed');
+            $this->quota->release($ownerId, $taskId);
 
             throw $e;
         }
+    }
 
-        return $export;
+    /** @throws ValidationException */
+    private function task(string $taskId, string $ownerId, ExportCreateDTO $dto): ExportTask
+    {
+        $plan = ExportPlan::for($this->registry->get($dto->exportable), $dto);
+        $query = $this->builder->query($plan);
+        // Counted once: the same number is the progress denominator and the cap check.
+        $rows = ExportConfig::bool('progress.enabled') ? $this->builder->countRows($plan, $query) : null;
+        $this->builder->assertWithinCap($plan, $query, $rows);
+
+        return new ExportTask($taskId, $ownerId, App::getLocale(), $dto, $rows);
     }
 }

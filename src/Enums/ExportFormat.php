@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Enums;
 
+use Alif\Export\Helpers\ExportConfig;
+
 enum ExportFormat: string
 {
     case CSV = 'csv';
@@ -16,7 +18,7 @@ enum ExportFormat: string
 
     public function maxRows(): int
     {
-        return (int) config("export.max_rows.{$this->value}");
+        return ExportConfig::int("max_rows.{$this->value}");
     }
 
     public function mimeType(): string

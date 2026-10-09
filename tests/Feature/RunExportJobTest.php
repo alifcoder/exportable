@@ -4,29 +4,37 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Feature;
 
-use Alif\Export\Entities\DataExport;
-use Alif\Export\Enums\ExportStatus;
+use Alif\Export\Contracts\ExportFileStore;
+use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\DTO\Export\ExportTask;
+use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportQuota;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
-use Alif\Export\Tests\Concerns\MakesExports;
+use Alif\Export\Services\Interfaces\ExportServiceInterface;
+use Alif\Export\Tests\Concerns\MakesTasks;
+use Alif\Export\Tests\Fixtures\DiskFileStore;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
+use Alif\Export\Tests\Fixtures\OrderFilter;
+use Alif\Export\Tests\Fixtures\OrderLine;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 
 final class RunExportJobTest extends TestCase
 {
-    use MakesExports;
+    use MakesTasks;
 
     private User $user;
 
@@ -36,286 +44,288 @@ final class RunExportJobTest extends TestCase
 
         Storage::fake('local');
         app(ExportRegistry::class)->register('orders', OrderExportable::class);
-        Gate::define('data-export', fn ($user, string $key): bool => true);
+        Gate::define('data-export', fn (): bool => true);
         $this->user = User::create(['name' => 'u']);
     }
 
-    private function runJob(DataExport $export): void
+    protected function tearDown(): void
     {
-        app()->call([new RunExport($export->id), 'handle']);
+        DiskFileStore::$failPut = false;
+        OrderFilter::$scopeByAuthUser = false;
+
+        parent::tearDown();
     }
 
-    // ---- configuration ------------------------------------------------------
-
-    public function test_job_is_queued_with_a_single_try_and_the_configured_timeout(): void
+    private function runTask(ExportTask $task): void
     {
-        config(['export.queue.timeout' => 321]);
+        app()->call([new RunExport($task->toArray()), 'handle']);
+    }
 
-        $job = new RunExport('id');
+    /** @return list<ExportFinished> */
+    private function finishedEvents(): array
+    {
+        return Event::dispatched(ExportFinished::class)->map(fn (array $args): ExportFinished => $args[0])->values()->all();
+    }
+
+    private function reserve(ExportTask $task): void
+    {
+        app(ExportQuota::class)->reserve($task->ownerId, $task->id);
+    }
+
+    private function slotTaken(ExportTask $task): bool
+    {
+        return Cache::has("export-slot:{$task->ownerId}:{$task->id}");
+    }
+
+    public function test_job_is_queued_with_a_single_try_the_configured_timeout_queue_and_connection(): void
+    {
+        config(['export.queue.timeout' => 321, 'export.queue.name' => 'exports', 'export.queue.connection' => 'sync']);
+
+        $job = new RunExport([]);
 
         $this->assertInstanceOf(ShouldQueue::class, $job);
         $this->assertSame(1, $job->tries);
         $this->assertSame(321, $job->timeout);
-    }
-
-    public function test_job_goes_to_the_configured_queue_and_connection(): void
-    {
-        config(['export.queue.name' => 'exports', 'export.queue.connection' => 'sync']);
-
-        $job = new RunExport('id');
-
         $this->assertSame('exports', $job->queue);
         $this->assertSame('sync', $job->connection);
     }
 
-    public function test_dispatching_pushes_the_export_id(): void
+    public function test_dispatching_pushes_the_task_payload(): void
     {
         Queue::fake();
+        $task = $this->makeTask($this->user);
 
-        RunExport::dispatch('abc');
+        RunExport::dispatch($task->toArray());
 
-        Queue::assertPushed(RunExport::class, fn (RunExport $j): bool => $j->exportId === 'abc');
+        Queue::assertPushed(RunExport::class, fn (RunExport $j): bool => $j->task === $task->toArray());
     }
 
-    // ---- handle -------------------------------------------------------------
-
-    public function test_missing_row_is_a_silent_no_op(): void
+    public function test_success_stores_the_file_and_announces_it_once(): void
     {
         Event::fake([ExportFinished::class]);
-
-        app()->call([new RunExport('00000000-0000-4000-8000-000000000000'), 'handle']);
-
-        Event::assertNotDispatched(ExportFinished::class);
-        $this->assertSame([], Storage::disk('local')->allFiles());
-    }
-
-    public function test_success_completes_the_row_writes_the_file_under_the_configured_directory_and_announces_once(): void
-    {
-        Event::fake([ExportFinished::class]);
-        config(['export.directory' => '/custom/dir/']);
         Order::create(['number' => 'A', 'total' => 1]);
-        $export = $this->makeExport($this->user, ['options' => ['columns' => ['number']]]);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame(ExportStatus::COMPLETED, $fresh->status);
-        $this->assertSame(1, $fresh->rows_count);
-        $this->assertMatchesRegularExpression('#^custom/dir/[0-9a-f-]{36}\.csv$#', $fresh->path);
-        $this->assertSame('local', $fresh->disk);
-        Storage::disk('local')->assertExists($fresh->path);
-        Event::assertDispatchedTimes(ExportFinished::class, 1);
+        $events = $this->finishedEvents();
+        $this->assertCount(1, $events);
+        $this->assertTrue($events[0]->succeeded());
+        $this->assertSame(1, $events[0]->rows);
+        $this->assertStringEndsWith('.csv', (string) $events[0]->fileName);
+        $this->assertStringEndsWith((string) $events[0]->fileName, (string) $events[0]->fileId);
+        Storage::disk('local')->assertExists($events[0]->fileId);
     }
 
-    public function test_configured_disk_overrides_the_default_one(): void
-    {
-        Storage::fake('exports-disk');
-        config(['export.disk' => 'exports-disk']);
-        $export = $this->makeExport($this->user);
-
-        $this->runJob($export);
-
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame('exports-disk', $fresh->disk);
-        Storage::disk('exports-disk')->assertExists($fresh->path);
-        $this->assertSame([], Storage::disk('local')->allFiles());
-    }
-
-    public function test_xlsx_path_has_the_xlsx_extension(): void
-    {
-        $export = $this->makeExport($this->user, ['format' => 'xlsx', 'options' => ['format' => 'xlsx']]);
-
-        $this->runJob($export);
-
-        $this->assertStringEndsWith('.xlsx', DataExport::findOrFail($export->id)->path);
-    }
-
-    public function test_job_skips_a_cancelled_export_and_never_resurrects_it(): void
-    {
-        $export = $this->makeExport($this->user);
-        DataExport::whereKey($export->id)->delete();
-
-        $this->runJob($export);
-
-        $this->assertNull(DataExport::find($export->id));
-        $this->assertSame([], Storage::disk('local')->allFiles());
-    }
-
-    #[DataProvider('terminalOrBusy')]
-    public function test_job_does_not_run_an_export_that_is_not_pending(ExportStatus $status): void
+    public function test_xlsx_file_has_the_xlsx_extension(): void
     {
         Event::fake([ExportFinished::class]);
-        $export = $this->makeExport($this->user, ['status' => $status]);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user, format: ExportFormat::XLSX));
 
-        $this->assertSame($status, DataExport::findOrFail($export->id)->status);
-        $this->assertNull(DataExport::findOrFail($export->id)->path);
+        $this->assertStringEndsWith('.xlsx', (string) $this->finishedEvents()[0]->fileName);
+    }
+
+    public function test_the_event_can_be_switched_off_by_config(): void
+    {
+        Event::fake([ExportFinished::class]);
+        config(['export.events.finished' => false]);
+
+        $this->runTask($this->makeTask($this->user));
+        $this->runTask($this->makeTask($this->user, ['removed_column']));
+
         Event::assertNotDispatched(ExportFinished::class);
     }
 
-    /** @return array<string, array{ExportStatus}> */
-    public static function terminalOrBusy(): array
+    public function test_a_column_removed_from_the_definition_is_written_as_an_empty_column(): void
     {
-        return [
-            'processing' => [ExportStatus::PROCESSING],
-            'completed' => [ExportStatus::COMPLETED],
-            'failed' => [ExportStatus::FAILED],
-        ];
+        Event::fake([ExportFinished::class]);
+        Order::create(['number' => 'A-1', 'total' => 1]);
+
+        $this->runTask($this->makeTask($this->user, ['number', 'removed_column']));
+
+        $event = $this->finishedEvents()[0];
+        $this->assertTrue($event->succeeded());
+        $this->assertStringContainsString("A-1,\n", Storage::disk('local')->get($event->fileId));
     }
 
-    // ---- failure paths -----------------------------------------------------------
-
-    public function test_client_facing_failure_is_recorded_with_its_code_and_not_reported(): void
+    public function test_forbidden_owner_fails_with_forbidden_and_leaves_no_file(): void
     {
-        Exceptions::fake();
-        $export = $this->makeExport($this->user, ['options' => ['columns' => ['removed_column']]]);
-
-        $this->runJob($export);
-
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame(ExportStatus::FAILED, $fresh->status);
-        $this->assertSame('unknown_column', $fresh->error_code);
-        $this->assertNotNull($fresh->finished_at);
-        Exceptions::assertNothingReported();
-    }
-
-    public function test_forbidden_owner_fails_the_export_with_forbidden_and_leaves_no_file(): void
-    {
+        Event::fake([ExportFinished::class]);
         Gate::define('data-export', fn (): bool => false);
-        Order::create(['number' => 'A', 'total' => 1]);
-        $export = $this->makeExport($this->user);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame('forbidden', $fresh->error_code);
-        Storage::disk('local')->assertMissing($fresh->path);
+        $this->assertSame('forbidden', $this->finishedEvents()[0]->errorCode);
+        $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
-    public function test_missing_owner_fails_with_owner_missing_and_is_reported_to_operators(): void
+    public function test_missing_owner_fails_with_owner_missing_and_is_reported(): void
     {
+        Event::fake([ExportFinished::class]);
         Exceptions::fake();
-        $export = $this->makeExport($this->user);
+        $task = $this->makeTask($this->user);
         User::query()->delete();
 
-        $this->runJob($export);
+        $this->runTask($task);
 
-        $this->assertSame('owner_missing', DataExport::findOrFail($export->id)->error_code);
+        $this->assertSame('owner_missing', $this->finishedEvents()[0]->errorCode);
         Exceptions::assertReported(fn (ExportException $e): bool => $e->errorCode === 'owner_missing');
     }
 
     public function test_unexpected_exception_becomes_export_failed_and_is_reported(): void
     {
+        Event::fake([ExportFinished::class]);
         Exceptions::fake();
-        $export = $this->makeExport($this->user, ['options' => ['columns' => ['number']]]);
         app()->bind(OrderExportable::class, fn () => throw new RuntimeException('kaboom'));
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame(ExportStatus::FAILED, $fresh->status);
-        $this->assertSame('export_failed', $fresh->error_code);
+        $this->assertSame('export_failed', $this->finishedEvents()[0]->errorCode);
         Exceptions::assertReported(fn (RuntimeException $e): bool => $e->getMessage() === 'kaboom');
     }
 
-    public function test_row_limit_growth_after_submit_fails_and_removes_the_partial_file(): void
+    public function test_undeclared_relation_fails_instead_of_lazy_loading(): void
     {
+        Event::fake([ExportFinished::class]);
+        Exceptions::fake();
+        $order = Order::create(['number' => 'A', 'total' => 1]);
+        OrderLine::create(['order_id' => $order->id, 'sku' => 's1', 'qty' => 1]);
+
+        $this->runTask($this->makeTask($this->user, ['number', 'undeclared']));
+
+        $this->assertSame('export_failed', $this->finishedEvents()[0]->errorCode);
+    }
+
+    public function test_row_limit_growth_after_submit_fails_and_keeps_no_file(): void
+    {
+        Event::fake([ExportFinished::class]);
         config(['export.max_rows.csv' => 1]);
         Order::create(['number' => 'A', 'total' => 1]);
         Order::create(['number' => 'B', 'total' => 1]);
-        $export = $this->makeExport($this->user);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame('row_limit_exceeded', $fresh->error_code);
-        Storage::disk('local')->assertMissing($fresh->path);
-        $this->assertNull($fresh->expires_at);
+        $this->assertSame('row_limit_exceeded', $this->finishedEvents()[0]->errorCode);
+        $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
-    public function test_failure_announces_exactly_once_with_the_failed_status(): void
+    public function test_a_store_that_cannot_keep_the_file_fails_with_storage_write_failed_and_is_reported(): void
     {
         Event::fake([ExportFinished::class]);
-        $export = $this->makeExport($this->user, ['options' => ['columns' => ['removed_column']]]);
+        Exceptions::fake();
+        DiskFileStore::$failPut = true;
+        Order::create(['number' => 'A', 'total' => 1]);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        Event::assertDispatchedTimes(ExportFinished::class, 1);
-        Event::assertDispatched(ExportFinished::class, fn (ExportFinished $e): bool => $e->export->status === ExportStatus::FAILED && $e->export->error_code === 'unknown_column');
+        $this->assertSame('storage_write_failed', $this->finishedEvents()[0]->errorCode);
+        Exceptions::assertReported(fn (ExportException $e): bool => $e->errorCode === 'storage_write_failed');
     }
 
-    public function test_a_throwing_listener_on_the_failure_path_keeps_the_failed_status_and_is_reported(): void
+    public function test_the_local_temporary_file_is_always_removed(): void
+    {
+        Order::create(['number' => 'A', 'total' => 1]);
+        $before = glob(sys_get_temp_dir().'/export_*') ?: [];
+
+        $this->runTask($this->makeTask($this->user));
+        DiskFileStore::$failPut = true;
+        $this->runTask($this->makeTask($this->user));
+
+        $this->assertSame($before, glob(sys_get_temp_dir().'/export_*') ?: []);
+    }
+
+    public function test_a_throwing_listener_never_fails_the_job_and_is_reported(): void
     {
         Exceptions::fake();
         Event::listen(ExportFinished::class, fn () => throw new RuntimeException('mail down'));
-        $export = $this->makeExport($this->user, ['options' => ['columns' => ['removed_column']]]);
+        Order::create(['number' => 'A', 'total' => 1]);
 
-        $this->runJob($export);
+        $this->runTask($this->makeTask($this->user));
 
-        $this->assertSame(ExportStatus::FAILED, DataExport::findOrFail($export->id)->status);
         Exceptions::assertReported(fn (RuntimeException $e): bool => $e->getMessage() === 'mail down');
     }
 
-    // ---- failed() hook -----------------------------------------------------------
+    public function test_job_runs_as_owner_so_host_scope_applies_and_does_not_leak_the_owner(): void
+    {
+        Event::fake([ExportFinished::class]);
+        OrderFilter::$scopeByAuthUser = true;
+        $other = User::create(['name' => 'o']);
+        Order::create(['number' => 'MINE-1', 'total' => '1', 'owner' => $this->user->id]);
+        Order::create(['number' => 'THEIRS-1', 'total' => '3', 'owner' => $other->id]);
+        Auth::forgetUser();
 
-    #[DataProvider('inFlight')]
-    public function test_failed_hook_marks_an_in_flight_export_failed_and_announces(ExportStatus $status): void
+        $this->runTask($this->makeTask($this->user));
+
+        $event = $this->finishedEvents()[0];
+        $csv = Storage::disk('local')->get($event->fileId);
+        $this->assertStringContainsString('MINE-1', $csv);
+        $this->assertStringNotContainsString('THEIRS-1', $csv);
+        $this->assertSame(1, $event->rows);
+        $this->assertNull(auth()->user());
+    }
+
+    public function test_children_are_flattened_with_repeated_document_cells(): void
+    {
+        Event::fake([ExportFinished::class]);
+        $a = Order::create(['number' => 'A-1', 'total' => '10.5']);
+        Order::create(['number' => 'B-1', 'total' => '5']);
+        foreach (['s1', 's2'] as $sku) {
+            OrderLine::create(['order_id' => $a->id, 'sku' => $sku, 'qty' => 2]);
+        }
+
+        $this->runTask($this->makeTask($this->user, ['number'], children: true));
+
+        $event = $this->finishedEvents()[0];
+        $this->assertSame(3, $event->rows);
+        $this->assertSame(2, substr_count(Storage::disk('local')->get($event->fileId), 'A-1'));
+    }
+
+    public function test_the_slot_is_released_once_even_if_failed_is_called_afterwards(): void
     {
         Event::fake([ExportFinished::class]);
         Exceptions::fake();
-        $export = $this->makeExport($this->user, ['status' => $status]);
+        $task = $this->makeTask($this->user);
+        $other = new ExportTask('00000000-0000-4000-8000-000000000002', $task->ownerId, 'en', $task->request, null);
+        $this->reserve($task);
+        $this->reserve($other);
 
-        (new RunExport($export->id))->failed(new RuntimeException('killed'));
+        $job = new RunExport($task->toArray());
+        app()->call([$job, 'handle']);
+        $job->failed(new RuntimeException('late'));
 
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame(ExportStatus::FAILED, $fresh->status);
-        $this->assertSame('export_failed', $fresh->error_code);
-        Event::assertDispatchedTimes(ExportFinished::class, 1);
+        $this->assertFalse($this->slotTaken($task));
+        $this->assertTrue($this->slotTaken($other), 'releasing one task must not touch another slot');
+        $this->assertCount(1, $this->finishedEvents(), 'the owner is told once');
+    }
+
+    public function test_failed_hook_announces_a_failure_and_frees_the_slot(): void
+    {
+        Event::fake([ExportFinished::class]);
+        Exceptions::fake();
+        $task = $this->makeTask($this->user);
+        $this->reserve($task);
+
+        (new RunExport($task->toArray()))->failed(new RuntimeException('killed'));
+
+        $this->assertSame('export_failed', $this->finishedEvents()[0]->errorCode);
+        $this->assertFalse($this->slotTaken($task));
         Exceptions::assertReported(RuntimeException::class);
     }
 
-    /** @return array<string, array{ExportStatus}> */
-    public static function inFlight(): array
+    public function test_with_a_sync_queue_the_slot_taken_by_start_is_released_by_the_job(): void
     {
-        return ['pending' => [ExportStatus::PENDING], 'processing' => [ExportStatus::PROCESSING]];
-    }
+        config(['export.queue.connection' => 'sync', 'export.max_active_per_user' => 1]);
+        $this->app->bind(ExportFileStore::class, DiskFileStore::class);
+        Gate::define('data-export', fn (): bool => true);
+        Order::create(['number' => 'A-1', 'total' => 1]);
+        $service = app(ExportServiceInterface::class);
+        $dto = new ExportCreateDTO('orders', ExportFormat::CSV, ['number'], false, [], null, []);
 
-    public function test_failed_hook_keeps_the_error_code_of_an_export_exception(): void
-    {
-        $export = $this->makeExport($this->user, ['status' => ExportStatus::PROCESSING]);
+        // The job runs inside create(); a second export must not be refused by a leaked slot.
+        $first = $service->create($this->user, $dto);
+        $second = $service->create($this->user, $dto);
 
-        (new RunExport($export->id))->failed(ExportException::rowLimitExceeded(5));
-
-        $this->assertSame('row_limit_exceeded', DataExport::findOrFail($export->id)->error_code);
-    }
-
-    #[DataProvider('finished')]
-    public function test_failed_hook_never_overwrites_a_finished_export(ExportStatus $status): void
-    {
-        Event::fake([ExportFinished::class]);
-        $export = $this->makeExport($this->user, ['status' => $status, 'error_code' => $status === ExportStatus::FAILED ? 'original' : null]);
-
-        (new RunExport($export->id))->failed(new RuntimeException('late'));
-
-        $fresh = DataExport::findOrFail($export->id);
-        $this->assertSame($status, $fresh->status);
-        $this->assertSame($status === ExportStatus::FAILED ? 'original' : null, $fresh->error_code);
-        Event::assertNotDispatched(ExportFinished::class);
-    }
-
-    /** @return array<string, array{ExportStatus}> */
-    public static function finished(): array
-    {
-        return ['completed' => [ExportStatus::COMPLETED], 'failed' => [ExportStatus::FAILED]];
-    }
-
-    public function test_failed_hook_with_a_deleted_row_does_nothing(): void
-    {
-        Event::fake([ExportFinished::class]);
-
-        (new RunExport('00000000-0000-4000-8000-000000000000'))->failed(new RuntimeException('x'));
-
-        Event::assertNotDispatched(ExportFinished::class);
+        $this->assertFalse($this->slotTaken($first));
+        $this->assertFalse($this->slotTaken($second));
     }
 }

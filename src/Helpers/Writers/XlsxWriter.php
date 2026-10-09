@@ -5,53 +5,78 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers\Writers;
 
 use Alif\Export\Exceptions\ExportException;
-use Illuminate\Support\Facades\Storage;
+use Alif\Export\Helpers\ExportStyle;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
 use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\Style;
+use OpenSpout\Common\Exception\IOException;
+use OpenSpout\Writer\XLSX\Options;
 use OpenSpout\Writer\XLSX\Writer as SpoutWriter;
 
-/** Streams rows to disk, so memory stays flat. Text is always a StringCell: a leading "=" is never a formula. */
+/**
+ * Streams rows to a local file, so memory stays flat. Text is always a StringCell: a leading "=" is never a
+ * formula. Fonts, header look, number formats and column widths come from `export.style`.
+ */
 final class XlsxWriter implements Writer
 {
     /** Excel keeps about 15 significant digits; longer numbers are written as exact text. */
     private const int MAX_SAFE_DIGITS = 15;
 
-    public function write(string $title, array $headings, array $numeric, iterable $rows, string $disk, string $path): int
+    public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
+
+    public function write(string $title, array $headings, array $numeric, iterable $rows, string $path): int
     {
-        $temp = tempnam(sys_get_temp_dir(), 'export_xlsx_');
-        $writer = new SpoutWriter;
-        $writer->openToFile($temp);
+        $options = new Options;
+
+        foreach ($headings as $i => $heading) {
+            $width = min($this->style->maxColumnWidth(), max($this->style->minColumnWidth(), mb_strlen($heading) + $this->style->columnPadding()));
+            $options->setColumnWidth($width, $i + 1);
+        }
+
+        $writer = new SpoutWriter($options);
+        try {
+            $writer->openToFile($path);
+        } catch (IOException $e) {
+            throw ExportException::storageWriteFailed($e->getMessage());
+        }
 
         try {
-            $writer->addRow(new Row(array_map(fn (string $heading): StringCell => new StringCell($heading, null), $headings)));
+            $writer->getCurrentSheet()->setName(mb_substr(trim(strtr($title, ['\\' => ' ', '/' => ' ', '?' => ' ', '*' => ' ', '[' => ' ', ']' => ' ', ':' => ' '])) ?: 'Export', 0, 31));
+
+            $header = $this->headerStyle();
+            $writer->addRow(new Row(array_map(fn (string $heading): StringCell => new StringCell($heading, $header), $headings)));
+
+            $base = $this->baseStyle();
+            $integer = (clone $base)->setFormat($this->style->integerFormat());
+            $decimal = (clone $base)->setFormat($this->style->numberFormat());
 
             $count = 0;
             foreach ($rows as $row) {
-                $writer->addRow(new Row($this->cells($row, $numeric)));
+                $writer->addRow(new Row($this->cells($row, $numeric, $base, $integer, $decimal)));
                 $count++;
-            }
-
-            $writer->close();
-
-            $stream = fopen($temp, 'rb');
-
-            if ($stream === false) {
-                throw ExportException::storageWriteFailed($disk, $path);
-            }
-
-            try {
-                if (! Storage::disk($disk)->writeStream($path, $stream)) {
-                    throw ExportException::storageWriteFailed($disk, $path);
-                }
-            } finally {
-                fclose($stream);
             }
 
             return $count;
         } finally {
-            @unlink($temp);
+            $writer->close();
         }
+    }
+
+    private function baseStyle(): Style
+    {
+        return (new Style)->setFontName($this->style->fontName())->setFontSize($this->style->fontSize());
+    }
+
+    private function headerStyle(): Style
+    {
+        $style = (new Style)
+            ->setFontName($this->style->fontName())
+            ->setFontSize($this->style->headerFontSize())
+            ->setFontColor($this->style->headerFontColor())
+            ->setBackgroundColor($this->style->headerBackground());
+
+        return $this->style->headerBold() ? $style->setFontBold() : $style;
     }
 
     /**
@@ -59,13 +84,15 @@ final class XlsxWriter implements Writer
      * @param  list<bool>  $numeric
      * @return list<NumericCell|StringCell>
      */
-    private function cells(array $row, array $numeric): array
+    private function cells(array $row, array $numeric, Style $base, Style $integer, Style $decimal): array
     {
         $cells = [];
 
         foreach ($row as $i => $value) {
             $number = ($numeric[$i] ?? false) ? $this->asNumber($value) : null;
-            $cells[] = $number !== null ? new NumericCell($number, null) : new StringCell((string) $value, null);
+            $cells[] = $number !== null
+                ? new NumericCell($number, is_int($number) ? $integer : $decimal)
+                : new StringCell((string) $value, $base);
         }
 
         return $cells;

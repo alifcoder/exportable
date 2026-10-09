@@ -8,7 +8,6 @@ use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportWriter;
 use Alif\Export\Tests\TestCaseWithoutDatabase;
-use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -25,7 +24,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     /** @param list<list<mixed>> $rows */
     private function csv(array $headings, array $numeric, array $rows): string
     {
-        app(ExportWriter::class)->store(ExportFormat::CSV, 't', $headings, $numeric, $rows, 'local', 'o.csv');
+        app(ExportWriter::class)->store(ExportFormat::CSV, 't', $headings, $numeric, $rows, Storage::disk('local')->path('o.csv'));
 
         return Storage::disk('local')->get('o.csv');
     }
@@ -64,7 +63,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_returns_row_count_excluding_header(): void
     {
-        $n = app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['h'], [false], [['1'], ['2'], ['3']], 'local', 'o.csv');
+        $n = app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['h'], [false], [['1'], ['2'], ['3']], Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(3, $n);
     }
@@ -108,8 +107,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
             ['h'],
             [false],
             [['=SUM(A1)'], ['+1'], ['-1'], ['@x']],
-            'local',
-            'o.xlsx',
+            Storage::disk('local')->path('o.xlsx'),
         );
 
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
@@ -124,7 +122,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numeric_column_stays_numeric(): void
     {
-        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [true], [['-5'], [12]], 'local', 'o.xlsx');
+        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [true], [['-5'], [12]], Storage::disk('local')->path('o.xlsx'));
 
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
 
@@ -132,15 +130,11 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
         $this->assertEquals(-5, $sheet->getCell('A2')->getValue());
     }
 
-    public function test_failed_disk_write_throws_instead_of_reporting_success(): void
+    public function test_an_unwritable_path_throws_instead_of_reporting_success(): void
     {
-        $disk = \Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('writeStream')->andReturn(false);
-        Storage::shouldReceive('disk')->with('broken')->andReturn($disk);
-
         foreach ([ExportFormat::CSV, ExportFormat::XLSX] as $format) {
             try {
-                app(ExportWriter::class)->store($format, 't', ['A'], [false], [['x']], 'broken', 'o.'.$format->value);
+                app(ExportWriter::class)->store($format, 't', ['A'], [false], [['x']], '/nonexistent-dir/o.'.$format->value);
                 $this->fail("{$format->value} writer ignored a failed write");
             } catch (ExportException $e) {
                 $this->assertSame('storage_write_failed', $e->errorCode);

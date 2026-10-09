@@ -9,10 +9,12 @@ use Illuminate\Database\Eloquent\Model;
 
 final class Column
 {
-    /** @var list<string> */
+    /** @var array<string, Closure|null> Relation name => constraint (null: plain eager load). */
     private array $relations = [];
 
     private bool $numeric = false;
+
+    private bool $date = false;
 
     private function __construct(private readonly string $label, private readonly ?Closure $value) {}
 
@@ -22,10 +24,20 @@ final class Column
         return new self($label, $value);
     }
 
-    /** Declare the relations this column needs eager loaded. */
-    public function relations(string ...$relations): self
+    /**
+     * Declare the relations this column needs eager loaded. Accepts Eloquent's `with()` shapes: plain names, or
+     * `name => Closure` for a constrained load; named plain loads such as `'c.d'` are kept as they are.
+     *
+     * @param  string|array<int|string, string|Closure>  ...$relations
+     */
+    public function relations(string|array ...$relations): self
     {
-        $this->relations = array_values(array_unique([...$this->relations, ...$relations]));
+        foreach ($relations as $group) {
+            foreach ((array) $group as $name => $constraint) {
+                [$name, $constraint] = is_int($name) ? [$constraint, null] : [$name, $constraint];
+                $this->relations[$name] ??= $constraint;
+            }
+        }
 
         return $this;
     }
@@ -35,6 +47,19 @@ final class Column
         $this->numeric = $numeric;
 
         return $this;
+    }
+
+    /** Format a date/time value with `export.style.date_format` (no time) instead of the date-time format. */
+    public function date(bool $date = true): self
+    {
+        $this->date = $date;
+
+        return $this;
+    }
+
+    public function isDate(): bool
+    {
+        return $this->date;
     }
 
     public function label(): string
@@ -47,7 +72,7 @@ final class Column
         return $this->numeric;
     }
 
-    /** @return list<string> */
+    /** @return array<string, Closure|null> */
     public function getRelations(): array
     {
         return $this->relations;

@@ -137,7 +137,7 @@ final class ExportBuilderChunksTest extends TestCase
                 return ['sku' => Column::make('SKU')];
             }
 
-            public function query(): Builder
+            public function query(array $parameters): Builder
             {
                 return ($this->query)();
             }

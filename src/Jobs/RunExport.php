@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace Alif\Export\Jobs;
 
-use Alif\Export\Entities\DataExport;
+use Alif\Export\Contracts\ExportFileStore;
+use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
-use Alif\Export\Services\Actions\Export\ClaimExport;
-use Alif\Export\Services\Actions\Export\CompleteExport;
-use Alif\Export\Services\Actions\Export\FailExport;
-use Alif\Export\Services\Actions\Export\GenerateExport;
+use Alif\Export\Helpers\ExportConfig;
+use Alif\Export\Helpers\ExportFileName;
+use Alif\Export\Helpers\ExportQuota;
+use Alif\Export\Services\Actions\Export\WriteExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 final class RunExport implements ShouldQueue
@@ -32,67 +32,70 @@ final class RunExport implements ShouldQueue
 
     public int $timeout;
 
-    public function __construct(public readonly string $exportId)
+    /** @param array<string, mixed> $task An {@see ExportTask} as an array. */
+    public function __construct(public readonly array $task)
     {
-        $this->timeout = (int) config('export.queue.timeout', 1800);
-        $this->onConnection(config('export.queue.connection'));
-        $this->onQueue(config('export.queue.name'));
+        $this->timeout = ExportConfig::int('queue.timeout');
+        $this->onConnection(ExportConfig::nullable('queue.connection'));
+        $this->onQueue(ExportConfig::nullable('queue.name'));
     }
 
-    public function handle(GenerateExport $generate, ClaimExport $claim, CompleteExport $complete, FailExport $fail): void
+    public function handle(WriteExport $write, ExportFileStore $store, ExportQuota $quota): void
     {
-        $export = DataExport::query()->find($this->exportId);
-
-        if ($export === null) {
-            return;
-        }
-
-        $disk = (string) (config('export.disk') ?? config('filesystems.default'));
-        $path = sprintf('%s/%s.%s', trim((string) config('export.directory', 'exports'), '/'), Str::uuid(), $export->format);
-
-        // A redelivered or already finished job must not run the export twice.
-        if (! $claim($export, $disk, $path)) {
-            return;
-        }
+        $task = ExportTask::fromArray($this->task);
+        $local = false;
 
         try {
-            $complete($export, $generate($export));
+            $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed('cannot create a temporary file');
+            $rows = $write($task, $local);
+            $name = ExportFileName::for($task);
+            $fileId = $store->put($task, $local, $name, $task->request->format->mimeType());
+            $finished = new ExportFinished($task, $fileId, $name, $rows, null);
         } catch (Throwable $e) {
-            Storage::disk($disk)->delete($path);
-            $this->recordFailure($export, $e, $fail);
-
-            return;
+            $finished = $this->failure($task, $e);
+        } finally {
+            if ($local !== false) {
+                @unlink($local);
+            }
+            $quota->release($task->ownerId, $task->id);
         }
 
-        $this->announce($export);
+        $this->announce($finished);
     }
 
     /** Called by the queue when the worker is killed (timeout) or the job crashes outside handle(). */
     public function failed(Throwable $e): void
     {
-        $export = DataExport::query()->find($this->exportId);
+        $task = ExportTask::fromArray($this->task);
 
-        if ($export !== null && $export->status->isInFlight()) {
-            $this->recordFailure($export, $e, app(FailExport::class));
-        }
+        app(ExportQuota::class)->release($task->ownerId, $task->id);
+        $this->announce($this->failure($task, $e));
     }
 
-    private function recordFailure(DataExport $export, Throwable $e, FailExport $fail): void
+    private function failure(ExportTask $task, Throwable $e): ExportFinished
     {
-        $fail($export, $e instanceof ExportException ? $e->errorCode : 'export_failed');
-
         if (! $e instanceof ExportException || in_array($e->errorCode, self::REPORTED_CODES, true)) {
             report($e);
         }
 
-        $this->announce($export);
+        return new ExportFinished($task, null, null, null, $e instanceof ExportException ? $e->errorCode : 'export_failed');
     }
 
-    /** A listener that throws (mail down, ...) must never turn a finished export into a failed one. */
-    private function announce(DataExport $export): void
+    /** A listener that throws (mail down, ...) must never fail the job. */
+    private function announce(ExportFinished $event): void
     {
+        if (! ExportConfig::bool('events.finished')) {
+            return;
+        }
+
+        // handle() and failed() can both reach here for one task (a worker killed during the announcement); the
+        // owner is told once.
+        if (! Cache::add("export-finished:{$event->task->id}", 1, ExportConfig::int('queue.timeout') + ExportConfig::int('stale_margin_seconds'))) {
+            return;
+        }
+
         try {
-            ExportFinished::dispatch($export);
+            event($event);
         } catch (Throwable $listenerError) {
             report($listenerError);
         }

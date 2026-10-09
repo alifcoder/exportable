@@ -44,39 +44,19 @@ final class ExportException extends RuntimeException
         return new self('The export owner could not be resolved.', 'owner_missing');
     }
 
-    public static function storageWriteFailed(string $disk, string $path): self
+    public static function storageWriteFailed(string $reason): self
     {
-        return new self(sprintf('Could not write the export file "%s" to disk "%s".', $path, $disk), 'storage_write_failed');
+        return new self(sprintf('Could not store the export file: %s.', $reason), 'storage_write_failed');
     }
 
-    public static function notFound(): self
+    public static function invalidConfiguration(string $key): self
     {
-        return new self('Export not found.', 'not_found');
+        return new self(sprintf('Missing export configuration "export.%s".', $key), 'invalid_configuration');
     }
 
     public static function tooManyActive(): self
     {
         return new self('Too many active exports.', 'too_many_active');
-    }
-
-    public static function notFailed(): self
-    {
-        return new self('Only failed exports can be retried.', 'not_failed');
-    }
-
-    public static function notReady(): self
-    {
-        return new self('Export is not ready.', 'not_ready');
-    }
-
-    public static function fileUnavailable(): self
-    {
-        return new self('Export file is no longer available.', 'file_unavailable');
-    }
-
-    public static function beingProcessed(): self
-    {
-        return new self('Export is being processed.', 'being_processed');
     }
 
     public static function invalidColumnValue(string $key): self
@@ -89,9 +69,6 @@ final class ExportException extends RuntimeException
     {
         return match ($this->errorCode) {
             'forbidden' => 403,
-            'not_found' => 404,
-            'not_failed', 'not_ready', 'being_processed' => 409,
-            'file_unavailable' => 410,
             'too_many_active' => 429,
             default => null,
         };

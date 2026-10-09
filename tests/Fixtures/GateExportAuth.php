@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Alif\Export\Auth;
+namespace Alif\Export\Tests\Fixtures;
 
 use Alif\Export\Contracts\ExportAuth;
 use Alif\Export\Exceptions\ExportException;
@@ -11,16 +11,16 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 
-final class LaravelExportAuth implements ExportAuth
+final class GateExportAuth implements ExportAuth
 {
     public function allows(Authenticatable $user, string $exportable): bool
     {
-        return Gate::forUser($user)->allows((string) config('export.ability', 'data-export'), [$exportable]);
+        return Gate::forUser($user)->allows('data-export', [$exportable]);
     }
 
     public function actingAs(string|int $ownerId, Closure $callback): mixed
     {
-        $guardName = (string) (config('export.guard') ?? config('auth.defaults.guard'));
+        $guardName = 'web';
         $provider = Auth::createUserProvider((string) config("auth.guards.{$guardName}.provider"));
         $owner = $provider?->retrieveById($ownerId);
 

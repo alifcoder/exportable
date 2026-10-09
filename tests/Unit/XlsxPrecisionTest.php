@@ -23,8 +23,7 @@ final class XlsxPrecisionTest extends TestCase
             ['id', 'qty'],
             [false, true],
             [[12345678901234567, 5]],
-            'local',
-            'x.xlsx',
+            Storage::disk('local')->path('x.xlsx'),
         );
 
         $sheet = IOFactory::load(Storage::disk('local')->path('x.xlsx'))->getActiveSheet();

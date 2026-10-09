@@ -22,8 +22,13 @@ interface Exportable
     /** @return array<string, Column> Columns evaluated against the child model; empty when none. */
     public function childColumns(): array;
 
-    /** Unfiltered base query. */
-    public function query(): Builder;
+    /**
+     * The base query of the document before the filter's conditions: whatever the host's own list applies to the
+     * model (default scopes, joins, aggregates) belongs here so the file matches the list.
+     *
+     * @param  array<string, mixed>  $parameters  The same sanitized data parameters {@see filter()} receives.
+     */
+    public function query(array $parameters): Builder;
 
     /** @param array<string, mixed> $parameters Sanitized data parameters. */
     public function filter(array $parameters): EBFilterInterface;
