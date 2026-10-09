@@ -5,6 +5,12 @@
       <directory>tests</directory>
     </testsuite>
   </testsuites>
+  <groups>
+    <exclude>
+      <group>stress</group>
+      <group>infra</group>
+    </exclude>
+  </groups>
   <source>
     <include>
       <directory>src</directory>

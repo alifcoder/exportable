@@ -1,0 +1,39 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Alif\Export\Helpers;
+
+use Alif\Export\Enums\ExportFormat;
+use Alif\Export\Helpers\Writers\CsvWriter;
+use Alif\Export\Helpers\Writers\Writer;
+use Alif\Export\Helpers\Writers\XlsxWriter;
+
+final class ExportWriter
+{
+    /**
+     * @param  list<string>  $headings
+     * @param  list<bool>  $numeric
+     * @param  iterable<int, list<string|int|float|null>>  $rows
+     * @param  string  $path  Local file to create.
+     * @return int Rows written (excluding the heading row).
+     */
+    public function store(
+        ExportFormat $format,
+        string $title,
+        array $headings,
+        array $numeric,
+        iterable $rows,
+        string $path,
+    ): int {
+        return $this->writer($format)->write($title, $headings, $numeric, $rows, $path);
+    }
+
+    private function writer(ExportFormat $format): Writer
+    {
+        return match ($format) {
+            ExportFormat::CSV => new CsvWriter,
+            ExportFormat::XLSX => new XlsxWriter,
+        };
+    }
+}
