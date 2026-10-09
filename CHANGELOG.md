@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed: a child table without its key column (a pivot-like table) is no longer ordered by it, so documents with such children export instead of failing.
+
 ## 0.3.0
 
 Breaking: the package is host-driven and stateless.

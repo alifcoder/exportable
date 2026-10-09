@@ -12,6 +12,7 @@ use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -150,6 +151,11 @@ final class ExportBuilder
             : $this->outputRows($query, $plan->childRelation);
     }
 
+    private function hasKeyColumn(Model $model): bool
+    {
+        return Schema::connection($model->getConnectionName())->hasColumn($model->getTable(), $model->getKeyName());
+    }
+
     /** Output rows when children are flattened: one per child, or one for a childless document. */
     private function outputRows(Builder $query, string $childRelation): int
     {
@@ -204,7 +210,10 @@ final class ExportBuilder
                     $constrained($query);
                 }
 
-                $query->orderBy($query->getModel()->getQualifiedKeyName());
+                // A child table without its key column (a pivot-like table) keeps the database order.
+                if ($this->hasKeyColumn($query->getModel())) {
+                    $query->orderBy($query->getModel()->getQualifiedKeyName());
+                }
             };
 
             foreach ($plan->childColumns as $column) {
