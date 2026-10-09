@@ -8,13 +8,17 @@ use Alif\Export\Contracts\Exportable;
 use Alif\QueryFilter\Interfaces\EBFilterInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use ReflectionMethod;
+use ReflectionNamedType;
 use Throwable;
 use WeakMap;
 
@@ -45,6 +49,9 @@ final class ResourceExportable implements Exportable
 
     /** @var WeakMap<Model, array<string, scalar|null>> */
     private WeakMap $values;
+
+    /** True while the layout is discovered: a stored row whose resource fails is skipped instead of failing the definition. */
+    private bool $discovering = false;
 
     /**
      * @param  class-string<Model>  $model
@@ -128,7 +135,19 @@ final class ResourceExportable implements Exportable
     /** @return array{columns: array<string, bool>, child_columns: array<string, bool>, child: ?string} */
     private function discover(): array
     {
-        $rows = $this->query([])->with($this->with)->reorder()->orderBy((new $this->model)->getQualifiedKeyName())->limit(self::SAMPLE_ROWS)->get();
+        $this->discovering = true;
+
+        try {
+            return $this->discoverLayout();
+        } finally {
+            $this->discovering = false;
+        }
+    }
+
+    /** @return array{columns: array<string, bool>, child_columns: array<string, bool>, child: ?string} */
+    private function discoverLayout(): array
+    {
+        $rows = $this->sample();
         $blank = new $this->model;
         $child = $this->childRelation ?? $this->detectChild($rows->first() ?? $blank);
         $childKey = $child === null ? null : Str::snake($child);
@@ -155,6 +174,22 @@ final class ResourceExportable implements Exportable
             'child_columns' => $this->numericFlags($this->withoutShadowed($children), null),
             'child' => $child,
         ];
+    }
+
+    /**
+     * Rows ordered by key; a filter whose own query cannot be ordered by the key (grouped or key-less) is sampled as it is.
+     *
+     * @return Collection<int, Model>
+     */
+    private function sample(): Collection
+    {
+        $query = fn (): Builder => $this->query([])->with($this->with)->limit(self::SAMPLE_ROWS);
+
+        try {
+            return $query()->reorder()->orderBy((new $this->model)->getQualifiedKeyName())->get();
+        } catch (QueryException) {
+            return $query()->get();
+        }
     }
 
     /**
@@ -262,7 +297,7 @@ final class ResourceExportable implements Exportable
             // The JSON round trip turns nested resources and collections into plain arrays.
             return json_decode((string) json_encode((new ($this->resource)($row))->resolve(request())), true) ?? [];
         } catch (Throwable $e) {
-            if ($row->exists) {
+            if ($row->exists && ! $this->discovering) {
                 throw $e;
             }
 
@@ -316,12 +351,33 @@ final class ResourceExportable implements Exportable
         foreach (array_keys($this->payload($sample)) as $key) {
             $relation = Str::camel((string) $key);
 
-            if (method_exists($sample, $relation) && $sample->{$relation}() instanceof HasMany) {
+            if ($this->isHasManyMethod($sample, $relation) && $sample->{$relation}() instanceof HasMany) {
                 return $relation;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Only a method the model class itself declares, without arguments and typed as a HasMany, is ever called: a
+     * payload key such as `deleted` must never reach an Eloquent method of the same name.
+     */
+    private function isHasManyMethod(Model $model, string $name): bool
+    {
+        if (! method_exists($model, $name)) {
+            return false;
+        }
+
+        $method = new ReflectionMethod($model, $name);
+        $type = $method->getReturnType();
+
+        return $method->isPublic()
+            && ! $method->isStatic()
+            && $method->getNumberOfRequiredParameters() === 0
+            && $method->getDeclaringClass()->getName() !== Model::class
+            && $type instanceof ReflectionNamedType
+            && is_a($type->getName(), HasMany::class, true);
     }
 
     private function looksNumeric(string $key, mixed $value): bool

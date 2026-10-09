@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 Breaking: the package is host-driven and stateless.
 
@@ -34,7 +34,7 @@ Breaking: the package is host-driven and stateless.
 - Fix: `POST {prefix}` rejected `data.*` (filter, sort, search) with 422 "prohibited" in hosts that enable `FormRequest::failOnUnknownFields()`.
 - Docs: host integration gotchas.
 
-## 0.1.0
+## 0.3.0
 
 - Async document export (csv, xlsx, pdf) on `alifcoder/query-filter`.
 - Endpoints: definition, create, show, download, list, delete/cancel, retry.
@@ -42,3 +42,4 @@ Breaking: the package is host-driven and stateless.
 - Row cap counts flattened output rows at submit (422) and while streaming.
 - Download re-checks the permission.
 - CI, Pint and PHPStan (level 5) quality gate; opt-in stress test (`--group stress`).
+- Fixed: child detection never calls a model method that the model class does not declare as a `HasMany`, so a resource key such as `deleted` no longer reaches an Eloquent method of that name; the discovery sample falls back to an unordered query when the filter's own query cannot be ordered by the key, and a stored row whose resource fails is skipped while discovering. File names of dotted keys read `sale_sale_...` instead of `salesale_...`.

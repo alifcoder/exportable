@@ -13,7 +13,7 @@ final class ExportFileName
     public static function for(ExportTask $task): string
     {
         $dto = $task->request;
-        $slug = Str::slug($dto->title ?? $dto->exportable, '_') ?: 'export';
+        $slug = Str::slug(str_replace('.', '_', $dto->title ?? $dto->exportable), '_') ?: 'export';
 
         return sprintf('%s_%s.%s', $slug, now()->format('Y-m-d_His'), $dto->format->extension());
     }
