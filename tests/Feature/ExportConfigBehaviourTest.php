@@ -61,7 +61,7 @@ final class ExportConfigBehaviourTest extends TestCase
         ExportConfig::nullable('queue.connection');
     }
 
-    public function test_progress_is_sent_every_configured_step_and_never_reaches_100(): void
+    public function test_progress_is_sent_every_configured_step_and_ends_with_100(): void
     {
         Event::fake([ExportProgressed::class]);
         config(['export.progress' => ['enabled' => true, 'min_rows' => 10, 'step_percent' => 20]]);
@@ -71,7 +71,7 @@ final class ExportConfigBehaviourTest extends TestCase
 
         $this->assertCount(100, $out, 'rows pass through untouched');
         $percents = Event::dispatched(ExportProgressed::class)->map(fn (array $args): int => $args[0]->percent)->all();
-        $this->assertSame([20, 40, 60, 80], $percents);
+        $this->assertSame([20, 40, 60, 80, 100], $percents);
         Event::assertDispatched(ExportProgressed::class, fn (ExportProgressed $e): bool => $e->exportId === $task->id
             && $e->ownerId === (string) $this->user->getKey() && $e->totalRows === 100);
     }

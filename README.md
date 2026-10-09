@@ -61,7 +61,7 @@ Errors raised by the service: `ValidationException` (filter / row cap), `ExportE
 | `queue.{connection,name,timeout}` | `connection`/`name` may be `null` but must be present |
 | `stale_margin_seconds` | a quota slot never released (worker killed) expires `queue.timeout` + this many seconds after it was taken |
 | `events.finished` | dispatch `ExportFinished` when an export completes or fails; `false` silences it |
-| `progress.{enabled,min_rows,step_percent}` | broadcast `ExportProgressed` for exports of at least `min_rows` rows, at most every `step_percent` points; never sends 100 (the finished event does) |
+| `progress.{enabled,min_rows,step_percent}` | broadcast `ExportProgressed` for exports of at least `min_rows` rows, at most every `step_percent` points, and a final 100 once the last row is written (the finished event then announces the file) |
 | `style.{date_format,datetime_format}` | PHP `date()` formats; `Column::date()` uses `date_format` |
 | `style.xlsx.font`, `.header`, `.number_format`, `.integer_format`, `.column_width` | font, header look (ARGB colours), Excel number formats, width = heading length + padding clamped to min..max |
 

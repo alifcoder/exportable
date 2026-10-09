@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Progress ends with a final `100` event once the last row is written (it used to stop below 100).
+
 ## 0.3.1
 
 - Fixed: a child table without its key column (a pivot-like table) is no longer ordered by it, so documents with such children export instead of failing.

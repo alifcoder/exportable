@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Passes rows through and reports the percentage of `total_rows` written, at most once per
- * `export.progress.step_percent`. Inactive (a plain pass-through) when progress is off or the export is smaller
+ * `export.progress.step_percent`, and 100 when the last row is written. Inactive (a plain pass-through) when progress is off or the export is smaller
  * than `export.progress.min_rows`. A listener that fails never fails the export.
  */
 final class ExportProgress
@@ -38,13 +38,17 @@ final class ExportProgress
             }
 
             $emitted++;
-            // Held below 100: the finished event announces completion.
+            // Held below 100 while rows are written; 100 is sent once the last row is out.
             $percent = min(99, intdiv($emitted * 100, $total));
 
             if ($percent >= $sent + $step) {
                 $sent = $percent;
                 $this->send($task, $percent, $emitted, $total);
             }
+        }
+
+        if ($active) {
+            $this->send($task, 100, $emitted, $total);
         }
     }
 
