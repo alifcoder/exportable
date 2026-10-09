@@ -18,7 +18,6 @@ use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -34,7 +33,6 @@ final class StartExportTest extends TestCase
         parent::setUp();
 
         app(ExportRegistry::class)->register('orders', OrderExportable::class);
-        Gate::define('data-export', fn ($user, string $key): bool => $key === 'orders');
         $this->user = User::create(['name' => 'u']);
         $this->service = app(ExportServiceInterface::class);
     }
@@ -54,18 +52,15 @@ final class StartExportTest extends TestCase
         ));
     }
 
-    public function test_definition_returns_the_exportable_for_a_permitted_key_and_forbids_unknown_and_denied_alike(): void
+    public function test_definition_returns_the_exportable_and_rejects_an_unknown_key(): void
     {
-        $this->assertInstanceOf(OrderExportable::class, $this->service->definition($this->user, 'orders'));
+        $this->assertInstanceOf(OrderExportable::class, $this->service->definition('orders'));
 
-        Gate::define('data-export', fn (): bool => false);
-        foreach (['orders', 'nope'] as $key) {
-            try {
-                $this->service->definition($this->user, $key);
-                $this->fail('expected forbidden');
-            } catch (ExportException $e) {
-                $this->assertSame('forbidden', $e->errorCode);
-            }
+        try {
+            $this->service->definition('nope');
+            $this->fail('expected unknown_exportable');
+        } catch (ExportException $e) {
+            $this->assertSame('unknown_exportable', $e->errorCode);
         }
     }
 
@@ -205,22 +200,6 @@ final class StartExportTest extends TestCase
         $this->expectException(ExportException::class);
 
         $this->service->create($this->user, $this->dto(key: 'nope'));
-    }
-
-    public function test_a_denied_owner_is_forbidden_before_any_slot_is_taken(): void
-    {
-        Queue::fake();
-        Gate::define('data-export', fn (): bool => false);
-
-        try {
-            $this->service->create($this->user, $this->dto());
-            $this->fail('expected forbidden');
-        } catch (ExportException $e) {
-            $this->assertSame('forbidden', $e->errorCode);
-        }
-
-        $this->assertSame(0, $this->slots());
-        Queue::assertNothingPushed();
     }
 
     public function test_the_row_count_is_queried_once_for_cap_and_progress(): void

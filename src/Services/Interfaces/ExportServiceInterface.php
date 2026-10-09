@@ -15,17 +15,17 @@ use Illuminate\Validation\ValidationException;
 interface ExportServiceInterface
 {
     /**
-     * Unknown and forbidden keys answer alike, so the caller cannot learn which keys exist.
+     * Who may see or export a document is the host's decision; authorise before calling.
      *
-     * @throws ExportException Forbidden.
+     * @throws ExportException Unknown key.
      */
-    public function definition(Authenticatable $user, string $key): Exportable;
+    public function definition(string $key): Exportable;
 
     /**
-     * Queues the export; its result arrives as {@see ExportFinished}.
+     * Queues the export; its result arrives as {@see ExportFinished}. The host authorises $owner before calling.
      *
      * @throws ValidationException When the host filter or the row cap rejects the request.
-     * @throws ExportException Too many active exports.
+     * @throws ExportException Unknown key, or too many active exports.
      */
     public function create(Authenticatable $owner, ExportCreateDTO $dto): ExportTask;
 }

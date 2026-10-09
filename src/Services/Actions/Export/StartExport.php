@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services\Actions\Export;
 
-use Alif\Export\Contracts\ExportAuth;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
@@ -24,21 +23,16 @@ final readonly class StartExport
 {
     public function __construct(
         private ExportRegistry $registry,
-        private ExportAuth $auth,
         private ExportBuilder $builder,
         private ExportQuota $quota,
     ) {}
 
     /**
      * @throws ValidationException When the host filter or the row cap rejects the request.
-     * @throws ExportException Forbidden, or too many active exports.
+     * @throws ExportException Unknown key, or too many active exports.
      */
     public function __invoke(Authenticatable $owner, ExportCreateDTO $dto): ExportTask
     {
-        if (! $this->registry->has($dto->exportable) || ! $this->auth->allows($owner, $dto->exportable)) {
-            throw ExportException::forbidden();
-        }
-
         $ownerId = (string) $owner->getAuthIdentifier();
         $taskId = (string) Str::uuid();
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Alif\Export\Providers;
 
-use Alif\Export\Contracts\ExportAuth;
 use Alif\Export\Contracts\ExportFileStore;
 use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Services\ExportService;
@@ -13,9 +12,9 @@ use Illuminate\Support\ServiceProvider;
 
 /**
  * Registers no routes, no tables, no schedule and no config defaults. The host provides `config/export.php` (see
- * the published stub), its own endpoints over {@see ExportServiceInterface}, and implementations of
- * {@see ExportAuth} and {@see ExportFileStore}. To change which
- * documents exist, bind a subclass of {@see ExportRegistry}.
+ * the published stub), its own endpoints and permission checks over {@see ExportServiceInterface}, an
+ * implementation of {@see ExportFileStore} and, in `export.queue.middleware`, the job middleware that signs the
+ * owner in. To change which documents exist, bind a subclass of {@see ExportRegistry}.
  */
 final class ExportServiceProvider extends ServiceProvider
 {

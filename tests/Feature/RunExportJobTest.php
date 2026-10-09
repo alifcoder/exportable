@@ -15,14 +15,18 @@ use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Jobs\RunExport;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
 use Alif\Export\Tests\Concerns\MakesTasks;
+use Alif\Export\Tests\Fixtures\ActingAsOwner;
 use Alif\Export\Tests\Fixtures\DiskFileStore;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
 use Alif\Export\Tests\Fixtures\OrderFilter;
 use Alif\Export\Tests\Fixtures\OrderLine;
+use Alif\Export\Tests\Fixtures\RecordingMiddleware;
+use Alif\Export\Tests\Fixtures\RejectingMiddleware;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Pipeline\Pipeline;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -31,6 +35,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
+use Throwable;
 
 final class RunExportJobTest extends TestCase
 {
@@ -56,9 +61,19 @@ final class RunExportJobTest extends TestCase
         parent::tearDown();
     }
 
+    /** Runs the job the way a worker does: through its middleware, then `failed()` when that throws. */
     private function runTask(ExportTask $task): void
     {
-        app()->call([new RunExport($task->toArray()), 'handle']);
+        $job = new RunExport($task->toArray());
+
+        try {
+            (new Pipeline(app()))
+                ->send($job)
+                ->through($job->middleware())
+                ->then(fn (RunExport $job) => app()->call([$job, 'handle']));
+        } catch (Throwable $e) {
+            $job->failed($e);
+        }
     }
 
     /** @return list<ExportFinished> */
@@ -156,6 +171,33 @@ final class RunExportJobTest extends TestCase
         $this->runTask($this->makeTask($this->user));
 
         $this->assertSame('forbidden', $this->finishedEvents()[0]->errorCode);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_configured_middleware_wraps_the_job(): void
+    {
+        Event::fake([ExportFinished::class]);
+        config(['export.queue.middleware' => [RecordingMiddleware::class, ActingAsOwner::class]]);
+        RecordingMiddleware::$calls = [];
+        $task = $this->makeTask($this->user);
+
+        $this->runTask($task);
+
+        $this->assertSame(["before:{$task->id}", "after:{$task->id}"], RecordingMiddleware::$calls);
+        $this->assertTrue($this->finishedEvents()[0]->succeeded());
+    }
+
+    public function test_an_export_exception_from_middleware_fails_the_export_with_its_code_and_frees_the_slot(): void
+    {
+        Event::fake([ExportFinished::class]);
+        config(['export.queue.middleware' => [RejectingMiddleware::class]]);
+        $task = $this->makeTask($this->user);
+        $this->reserve($task);
+
+        $this->runTask($task);
+
+        $this->assertSame('forbidden', $this->finishedEvents()[0]->errorCode);
+        $this->assertFalse($this->slotTaken($task));
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 

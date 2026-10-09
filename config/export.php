@@ -27,6 +27,9 @@ return [
         'name' => 'exports',
         // Worker retry_after must exceed this value (seconds).
         'timeout' => 1800,
+        // Job middleware classes (resolved from the container) wrapping every export job. The host signs the
+        // owner in here and re-checks the permission; throw an ExportException to fail the export.
+        'middleware' => [],
     ],
 
     // An active-export slot that is never released (worker killed) expires queue.timeout + this margin
@@ -43,8 +46,8 @@ return [
         'enabled' => true,
         // Only exports with at least this many output rows report progress.
         'min_rows' => 1000,
-        // Minimum percentage points between two events.
-        'step_percent' => 5,
+        // Minimum percentage points between two events; 1 streams every percent (10 => 11 => ... => 33).
+        'step_percent' => 1,
     ],
 
     'style' => [

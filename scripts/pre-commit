@@ -3,7 +3,8 @@ set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
-python3 scripts/format-staged-php.py
+echo "Checking code style..."
+./vendor/bin/pint --test --dirty
 
 echo "Running PHPStan..."
 ./vendor/bin/phpstan analyse --memory-limit=2G --no-progress

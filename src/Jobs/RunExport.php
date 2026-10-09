@@ -40,6 +40,21 @@ final class RunExport implements ShouldQueue
         $this->onQueue(ExportConfig::nullable('queue.name'));
     }
 
+    /**
+     * The host's middleware (`export.queue.middleware`): it receives this job, may read {@see self::$task}, and
+     * is where the owner is signed in and the permission re-checked. An ExportException it throws fails the
+     * export with that error code.
+     *
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return array_values(array_map(
+            fn (string $class): object => app($class),
+            ExportConfig::array('queue.middleware'),
+        ));
+    }
+
     public function handle(WriteExport $write, ExportFileStore $store, ExportQuota $quota): void
     {
         $task = ExportTask::fromArray($this->task);
