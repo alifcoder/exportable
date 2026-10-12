@@ -9,7 +9,6 @@ use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportProgress;
-use Alif\Export\Helpers\ExportWriter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 
@@ -18,7 +17,6 @@ final readonly class WriteExport
 {
     public function __construct(
         private ExportBuilder $builder,
-        private ExportWriter $writer,
         private ExportProgress $progress,
     ) {}
 
@@ -48,8 +46,7 @@ final readonly class WriteExport
         Model::preventLazyLoading();
 
         try {
-            return $this->writer->store(
-                $dto->format,
+            return $dto->format->writer()->write(
                 array_map(fn (ExportColumn $column): string => $column->label, $columns),
                 array_map(fn (ExportColumn $column) => $column->type, $columns),
                 $this->progress->track($task, $this->builder->rows($dto)),

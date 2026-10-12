@@ -9,7 +9,6 @@ use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
-use Alif\Export\Helpers\ExportFileName;
 use Alif\Export\Services\Actions\Export\WriteExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,7 +46,7 @@ final class RunExport implements ShouldQueue
         try {
             $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed('cannot create a temporary file');
             $rows = $write($task, $local);
-            $name = ExportFileName::for($task);
+            $name = $task->id.'.'.$task->request->format->extension();
             $fileId = $store->put($task, $local, $name, $task->request->format->mimeType());
             $finished = new ExportFinished($task, $fileId, $name, $rows, null);
         } catch (Throwable $e) {

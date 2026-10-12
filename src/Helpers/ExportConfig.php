@@ -36,10 +36,4 @@ final class ExportConfig
     {
         return (string) self::get($key);
     }
-
-    /** @return array<string, mixed> */
-    public static function array(string $key): array
-    {
-        return (array) self::get($key);
-    }
 }

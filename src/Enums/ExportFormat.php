@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Alif\Export\Enums;
 
 use Alif\Export\Helpers\ExportConfig;
+use Alif\Export\Helpers\Writers\CsvWriter;
+use Alif\Export\Helpers\Writers\Writer;
+use Alif\Export\Helpers\Writers\XlsxWriter;
 
 enum ExportFormat: string
 {
@@ -29,6 +32,14 @@ enum ExportFormat: string
         return match ($this) {
             self::CSV => 'text/csv',
             self::EXCEL => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+    }
+
+    public function writer(): Writer
+    {
+        return match ($this) {
+            self::CSV => new CsvWriter,
+            self::EXCEL => new XlsxWriter,
         };
     }
 }

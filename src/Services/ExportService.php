@@ -4,17 +4,43 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services;
 
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportRequest;
 use Alif\Export\DTO\Export\ExportTask;
-use Alif\Export\Services\Actions\Export\StartExport;
+use Alif\Export\DTO\Export\PreparedQuery;
+use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\ExportConfig;
+use Alif\Export\Jobs\RunExport;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Str;
 
 final readonly class ExportService implements ExportServiceInterface
 {
-    public function __construct(private StartExport $startExport) {}
+    public function __construct(private ExportBuilder $builder) {}
 
+    /**
+     * Everything is decided here, before the job exists: the columns are checked, the rows counted, the query
+     * compiled. The job only reads the prepared SQL and writes the file.
+     */
     public function create(ExportRequest $request): ExportTask
     {
-        return ($this->startExport)($request);
+        $query = $this->builder->ordered($request->query);
+        // Counted once: the same number is the progress denominator and the cap check.
+        $rows = ExportConfig::bool('progress.enabled') ? $this->builder->countRows($query) : null;
+        $this->builder->assertNotEmpty($query, $rows);
+        $this->builder->assertWithinCap($request->format, $query, $rows);
+
+        $dto = new ExportCreateDTO(
+            $request->source,
+            $request->format,
+            $this->builder->describe($request, $query),
+            PreparedQuery::from($query),
+        );
+
+        $task = new ExportTask((string) Str::uuid(), App::getLocale(), $dto, $rows);
+        RunExport::dispatch($task->toArray());
+
+        return $task;
     }
 }
