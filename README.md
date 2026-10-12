@@ -29,7 +29,7 @@ The list's own parameters plus two export parts, at the top level:
   "filter": {}, "sort": "-document_date", "search": "abc" }
 ```
 - `format`: `csv` or `excel` (a `.xlsx` file).
-- `columns`: resource key (dotted for nested objects) => heading. At most 200 columns, headings 1 to 150 characters. The file name is derived from the filter class (`SaleFilter` => `sale_<timestamp>.xlsx`).
+- `columns`: resource key (dotted for nested objects) => heading. At most 200 columns, headings 1 to 150 characters. The stored file is named `<task id>.<ext>`; the client chooses the download name.
 
 Errors raised on the request: `ValidationException` (422) for the export rules, the filter's parameters, an unknown column (`columns`), an empty result and the row cap (`format`); `ExportException` `too_many_active` (429).
 
