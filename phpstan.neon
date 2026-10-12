@@ -5,5 +5,8 @@ parameters:
     level: 5
     paths:
         - src
-        # The trait is analysed through the fixture filter that uses it.
-        - tests/Fixtures/OrderFilter.php
+    ignoreErrors:
+        # The trait is used by the host's filters, not inside this package.
+        -
+            identifier: trait.unused
+            path: src/Concerns/HandlesExport.php

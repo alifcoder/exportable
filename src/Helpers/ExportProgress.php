@@ -55,7 +55,7 @@ final class ExportProgress
     private function send(ExportTask $task, int $percent, int $rows, int $total): void
     {
         try {
-            ExportProgressed::dispatch($task->id, $task->ownerId, $percent, $rows, $total);
+            ExportProgressed::dispatch($task->id, $percent, $rows, $total);
         } catch (Throwable $e) {
             report($e);
         }

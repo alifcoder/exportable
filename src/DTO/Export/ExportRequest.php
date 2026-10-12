@@ -18,14 +18,11 @@ final readonly class ExportRequest
      * @param  class-string<ExportSource>  $source
      * @param  Builder<*>  $query  Filtered, access-limited and windowed like the list; ordering is added by the package.
      * @param  list<ExportColumn>  $columns
-     * @param  list<ExportColumn>  $childColumns
      */
     public function __construct(
         public string $source,
         public ExportFormat $format,
         public Builder $query,
         public array $columns,
-        public ?string $childRelation = null,
-        public array $childColumns = [],
     ) {}
 }

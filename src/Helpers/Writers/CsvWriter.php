@@ -15,7 +15,7 @@ final class CsvWriter implements Writer
 
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(string $title, array $headings, array $types, iterable $rows, string $path): int
+    public function write(array $headings, array $types, iterable $rows, string $path): int
     {
         $file = @fopen($path, 'wb');
 

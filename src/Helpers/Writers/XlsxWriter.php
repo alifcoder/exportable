@@ -26,7 +26,7 @@ final class XlsxWriter implements Writer
 {
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(string $title, array $headings, array $types, iterable $rows, string $path): int
+    public function write(array $headings, array $types, iterable $rows, string $path): int
     {
         $options = new Options;
 
@@ -43,8 +43,6 @@ final class XlsxWriter implements Writer
         }
 
         try {
-            $writer->getCurrentSheet()->setName(mb_substr(trim(strtr($title, ['\\' => ' ', '/' => ' ', '?' => ' ', '*' => ' ', '[' => ' ', ']' => ' ', ':' => ' '])) ?: 'Export', 0, 31));
-
             $header = $this->headerStyle();
             $writer->addRow(new Row(array_map(fn (string $heading): StringCell => new StringCell($heading, $header), $headings)));
 

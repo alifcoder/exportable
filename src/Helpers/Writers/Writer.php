@@ -16,5 +16,5 @@ interface Writer
      * @param  string  $path  Local file the writer creates.
      * @return int Rows written (excluding the heading row).
      */
-    public function write(string $title, array $headings, array $types, iterable $rows, string $path): int;
+    public function write(array $headings, array $types, iterable $rows, string $path): int;
 }

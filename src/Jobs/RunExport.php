@@ -10,7 +10,6 @@ use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportFileName;
-use Alif\Export\Helpers\ExportQuota;
 use Alif\Export\Services\Actions\Export\WriteExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,7 +25,7 @@ final class RunExport implements ShouldQueue
     use Queueable;
 
     /** Operator-facing ExportException codes that must reach the exception handler. */
-    private const array REPORTED_CODES = ['owner_missing', 'storage_write_failed'];
+    private const array REPORTED_CODES = ['storage_write_failed'];
 
     public int $tries = 1;
 
@@ -40,7 +39,7 @@ final class RunExport implements ShouldQueue
         $this->onQueue(ExportConfig::nullable('queue.name'));
     }
 
-    public function handle(WriteExport $write, ExportFileStore $store, ExportQuota $quota): void
+    public function handle(WriteExport $write, ExportFileStore $store): void
     {
         $task = ExportTask::fromArray($this->task);
         $local = false;
@@ -57,7 +56,6 @@ final class RunExport implements ShouldQueue
             if ($local !== false) {
                 @unlink($local);
             }
-            $quota->release($task->ownerId, $task->id);
         }
 
         $this->announce($finished);
@@ -66,10 +64,7 @@ final class RunExport implements ShouldQueue
     /** Called by the queue when the worker is killed (timeout) or the job crashes outside handle(). */
     public function failed(Throwable $e): void
     {
-        $task = ExportTask::fromArray($this->task);
-
-        app(ExportQuota::class)->release($task->ownerId, $task->id);
-        $this->announce($this->failure($task, $e));
+        $this->announce($this->failure(ExportTask::fromArray($this->task), $e));
     }
 
     private function failure(ExportTask $task, Throwable $e): ExportFinished
@@ -89,7 +84,7 @@ final class RunExport implements ShouldQueue
         }
 
         // handle() and failed() can both reach here for one task (a worker killed during the announcement); the
-        // owner is told once.
+        // event is sent once.
         if (! Cache::add("export-finished:{$event->task->id}", 1, ExportConfig::int('queue.timeout') + ExportConfig::int('stale_margin_seconds'))) {
             return;
         }

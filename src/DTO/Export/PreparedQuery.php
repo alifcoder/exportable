@@ -7,15 +7,10 @@ namespace Alif\Export\DTO\Export;
 use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Builder;
 
-/**
- * A query that is ready to run: everything the host's list applies (filter, access limits, ordering, selects) is
- * compiled into SQL on the request, so the job reads it without a user, a filter or a request. `limit`/`offset`
- * are the list's own window, kept apart so the job can page through it.
- */
 final readonly class PreparedQuery
 {
-    /** Drivers whose `limit n offset m` tail the job appends to {@see $sql}. */
-    private const array DRIVERS = ['mysql', 'mariadb', 'pgsql', 'sqlite'];
+    /** The only driver supported: the job appends a `limit n offset m` tail to {@see $sql}. */
+    private const string DRIVER = 'pgsql';
 
     /** @param list<mixed> $bindings */
     public function __construct(
@@ -31,7 +26,7 @@ final readonly class PreparedQuery
     {
         $connection = $builder->getModel()->getConnection();
 
-        if (! in_array($connection->getDriverName(), self::DRIVERS, true)) {
+        if ($connection->getDriverName() !== self::DRIVER) {
             throw ExportException::invalidRegistration(sprintf('Export cannot page the "%s" driver.', $connection->getDriverName()));
         }
 

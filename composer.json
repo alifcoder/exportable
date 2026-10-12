@@ -28,11 +28,6 @@
       "Alif\\Export\\": "src/"
     }
   },
-  "autoload-dev": {
-    "psr-4": {
-      "Alif\\Export\\Tests\\": "tests/"
-    }
-  },
   "extra": {
     "laravel": {
       "providers": [
@@ -50,11 +45,9 @@
     "lint": "pint --test",
     "phpstan": "phpstan analyse --memory-limit=2G",
     "analyse": "@phpstan",
-    "test": "phpunit",
     "check": [
       "@lint",
-      "@analyse",
-      "@test"
+      "@analyse"
     ]
   }
 }

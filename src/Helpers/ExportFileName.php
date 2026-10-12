@@ -14,12 +14,8 @@ final class ExportFileName
     {
         $dto = $task->request;
 
-        return sprintf('%s_%s.%s', Str::slug(Str::snake(self::name($dto->source)), '_') ?: 'export', now()->format('Y-m-d_His'), $dto->format->extension());
-    }
+        $name = Str::headline(Str::beforeLast(class_basename($dto->source), 'Filter'));
 
-    /** The name of the list, also the xlsx sheet name: `Modules\Sale\Http\Filters\SaleFilter` => `Sale`. */
-    public static function name(string $source): string
-    {
-        return Str::headline(Str::beforeLast(class_basename($source), 'Filter'));
+        return sprintf('%s_%s.%s', Str::slug(Str::snake($name), '_') ?: 'export', now()->format('Y-m-d_His'), $dto->format->extension());
     }
 }

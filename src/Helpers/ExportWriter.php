@@ -22,13 +22,12 @@ final class ExportWriter
      */
     public function store(
         ExportFormat $format,
-        string $title,
         array $headings,
         array $types,
         iterable $rows,
         string $path,
     ): int {
-        return $this->writer($format)->write($title, $headings, $types, $rows, $path);
+        return $this->writer($format)->write($headings, $types, $rows, $path);
     }
 
     private function writer(ExportFormat $format): Writer

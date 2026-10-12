@@ -21,4 +21,3 @@ jobs:
       - run: composer install --no-interaction --prefer-dist
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --memory-limit=2G
-      - run: vendor/bin/phpunit

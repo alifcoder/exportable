@@ -7,7 +7,7 @@ namespace Alif\Export\Events;
 use Alif\Export\DTO\Export\ExportTask;
 use Illuminate\Foundation\Events\Dispatchable;
 
-/** Dispatched once an export is written or has failed (when `export.events.finished` is on). Hosts listen to notify the owner. */
+/** Dispatched once an export is written or has failed (when `export.events.finished` is on). Hosts listen to notify whoever asked. */
 final class ExportFinished
 {
     use Dispatchable;

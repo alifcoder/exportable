@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Breaking:
+
+- Child rows are gone: `columns` is a flat `key => heading` map (a nested object is rejected), `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns`, `ExportBuilder::assertChildRelation()` is removed.
+- The package no longer knows who asked: `HandlesExport::export()` and `ExportServiceInterface::create()` take no owner, `ExportTask::$ownerId` is gone. With it go the per-owner quota (`ExportQuota`, `max_active_per_user`, `ExportException::tooManyActive()`/`forbidden()`/`ownerMissing()`, `httpStatus()`/`report()`/`render()`). `stale_margin_seconds` now only sets how long the "finished" announcement is remembered.
+- `ExportProgressed` broadcasts on the private channel `export.{id}` (was `App.Models.User.{ownerId}`) and has no `ownerId`.
+- `Writer::write()` and `ExportWriter::store()` take no title; the xlsx sheet keeps the default name. `ExportFileName::name()` is removed.
+
 ## 0.6.0
 
 The export is requested through the filter and settled before the job exists. The job reads a prepared query; it needs no signed-in user.

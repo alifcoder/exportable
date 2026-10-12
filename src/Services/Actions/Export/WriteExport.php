@@ -8,7 +8,6 @@ use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
-use Alif\Export\Helpers\ExportFileName;
 use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Helpers\ExportWriter;
 use Illuminate\Database\Eloquent\Model;
@@ -44,14 +43,13 @@ final readonly class WriteExport
     private function write(ExportTask $task, string $path): int
     {
         $dto = $task->request;
-        $columns = [...$dto->columns, ...$dto->childColumns];
+        $columns = $dto->columns;
         $previous = Model::preventsLazyLoading();
         Model::preventLazyLoading();
 
         try {
             return $this->writer->store(
                 $dto->format,
-                ExportFileName::name($dto->source),
                 array_map(fn (ExportColumn $column): string => $column->label, $columns),
                 array_map(fn (ExportColumn $column) => $column->type, $columns),
                 $this->progress->track($task, $this->builder->rows($dto)),

@@ -19,9 +19,6 @@ return [
         'xlsx' => 500_000,
     ],
 
-    // Exports one owner may have pending or processing at once.
-    'max_active_per_user' => 3,
-
     'queue' => [
         'connection' => null,
         'name' => 'exports',
@@ -29,8 +26,8 @@ return [
         'timeout' => 1800,
     ],
 
-    // An active-export slot that is never released (worker killed) expires queue.timeout + this margin
-    // (seconds) after it was taken.
+    // The "finished" announcement of an export is remembered queue.timeout + this margin (seconds), so it is
+    // sent once even if both the job and the queue's failure hook reach it.
     'stale_margin_seconds' => 600,
 
     // Dispatch Events\ExportFinished when an export becomes completed or failed (file ready notification).
@@ -38,7 +35,7 @@ return [
         'finished' => true,
     ],
 
-    // Progress events (Events\ExportProgressed) for the owner's client.
+    // Progress events (Events\ExportProgressed) for the client.
     'progress' => [
         'enabled' => true,
         // Only exports with at least this many output rows report progress.

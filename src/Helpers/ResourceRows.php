@@ -7,13 +7,12 @@ namespace Alif\Export\Helpers;
 use Alif\Export\Enums\ColumnType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
  * Reads a model the way the API shows it: through its resource, flattened into dotted keys
  * (`business_partner.name`). The resource is the single source of values, so the relations it touches must be
- * eager loaded. A child list (`products`) is taken from the same payload, in the resource's own order.
+ * eager loaded.
  */
 final class ResourceRows
 {
@@ -26,14 +25,12 @@ final class ResourceRows
     private const string DATE_VALUE = '/^\d{4}-\d{2}-\d{2}$/';
 
     /** @param class-string<JsonResource> $resource */
-    public function __construct(private readonly string $resource, private readonly ?string $childRelation = null) {}
+    public function __construct(private readonly string $resource) {}
 
-    /**
-     * @return array{0: array<string, scalar|null>, 1: list<array<string, scalar|null>>} The row's values and its children's.
-     */
-    public function split(Model $row): array
+    /** @return array<string, scalar|null> The row's values by dotted key. */
+    public function values(Model $row): array
     {
-        return $this->divide($this->payload($row, false));
+        return $this->flatten($this->payload($row, false));
     }
 
     /**
@@ -41,23 +38,17 @@ final class ResourceRows
      * sampled row still contribute their keys through the blank model.
      *
      * @param  iterable<Model>  $rows
-     * @return array{0: array<string, scalar|null>, 1: array<string, scalar|null>} Parent keys, child keys.
+     * @return array<string, scalar|null>
      */
     public function layout(iterable $rows, Model $blank): array
     {
-        $parents = [];
-        $children = [];
+        $keys = [];
 
         foreach ([...$rows, $blank] as $row) {
-            [$parent, $items] = $this->divide($this->payload($row, ! $row->exists));
-            $parents = $this->merge($parents, $parent);
-
-            foreach ($items as $item) {
-                $children = $this->merge($children, $item);
-            }
+            $keys = $this->merge($keys, $this->flatten($this->payload($row, ! $row->exists)));
         }
 
-        return [$this->withoutShadowed($parents), $this->withoutShadowed($children)];
+        return $this->withoutShadowed($keys);
     }
 
     /**
@@ -75,23 +66,6 @@ final class ResourceRows
             is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => ColumnType::Number,
             default => null,
         };
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     * @return array{0: array<string, scalar|null>, 1: list<array<string, scalar|null>>}
-     */
-    private function divide(array $payload): array
-    {
-        $children = [];
-
-        if ($this->childRelation !== null) {
-            foreach ((array) ($payload[Str::snake($this->childRelation)] ?? []) as $item) {
-                $children[] = $this->flatten((array) $item);
-            }
-        }
-
-        return [$this->flatten($payload), $children];
     }
 
     /**
@@ -114,7 +88,7 @@ final class ResourceRows
     }
 
     /**
-     * Objects recurse into dotted keys; lists are dropped (children are handled separately).
+     * Objects recurse into dotted keys; lists are dropped.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, scalar|null>
