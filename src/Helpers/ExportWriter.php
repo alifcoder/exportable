@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Helpers\Writers\CsvWriter;
 use Alif\Export\Helpers\Writers\Writer;
 use Alif\Export\Helpers\Writers\XlsxWriter;
+use Carbon\CarbonInterface;
 
 final class ExportWriter
 {
     /**
      * @param  list<string>  $headings
-     * @param  list<bool>  $numeric
-     * @param  iterable<int, list<string|int|float|null>>  $rows
+     * @param  list<ColumnType|null>  $types  Declared type per column; null reads the type of each value.
+     * @param  iterable<int, list<string|int|float|bool|CarbonInterface|null>>  $rows
      * @param  string  $path  Local file to create.
      * @return int Rows written (excluding the heading row).
      */
@@ -22,11 +24,11 @@ final class ExportWriter
         ExportFormat $format,
         string $title,
         array $headings,
-        array $numeric,
+        array $types,
         iterable $rows,
         string $path,
     ): int {
-        return $this->writer($format)->write($title, $headings, $numeric, $rows, $path);
+        return $this->writer($format)->write($title, $headings, $types, $rows, $path);
     }
 
     private function writer(ExportFormat $format): Writer

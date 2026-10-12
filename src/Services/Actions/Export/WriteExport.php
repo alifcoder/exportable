@@ -55,7 +55,7 @@ final readonly class WriteExport
                 $dto->format,
                 $dto->title ?? (string) __($exportable->title()),
                 $plan->headings(),
-                $plan->numeric(),
+                $plan->types(),
                 $this->progress->track($task, $this->builder->rows($plan, $this->builder->query($plan))),
                 $path,
             );

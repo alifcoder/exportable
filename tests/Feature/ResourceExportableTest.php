@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Feature;
 
 use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportPlan;
@@ -13,6 +14,7 @@ use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderFilter;
 use Alif\Export\Tests\Fixtures\OrderResource;
 use Alif\Export\Tests\Fixtures\SharedKeyOrderResource;
+use Alif\Export\Tests\Fixtures\TypedOrderResource;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Database\Eloquent\Model;
 
@@ -187,5 +189,33 @@ final class ResourceExportableTest extends TestCase
         $rows = $this->rows($exportable, ['number'], ['sku']);
 
         $this->assertSame([['A-1', 'y']], $rows);
+    }
+
+    public function test_column_types_are_read_from_the_values_and_the_host_can_set_them(): void
+    {
+        Order::create(['number' => 'A-1', 'total' => 5]);
+
+        $exportable = new ResourceExportable(
+            'Orders',
+            Order::class,
+            TypedOrderResource::class,
+            fn (array $parameters) => new OrderFilter($parameters),
+            fn (array $parameters) => Order::query(),
+            types: ['off' => ColumnType::Percent],
+        );
+
+        $types = array_map(fn ($column): ?ColumnType => $column->type(), $exportable->columns());
+
+        $this->assertSame([
+            'number' => null,
+            'paid' => ColumnType::Boolean,
+            'qty' => ColumnType::Number,
+            'ratio' => ColumnType::Number,
+            'total' => ColumnType::Number,
+            'created_at' => ColumnType::DateTime,
+            'due' => ColumnType::Date,
+            'off' => ColumnType::Percent,
+            'code' => null,
+        ], $types);
     }
 }

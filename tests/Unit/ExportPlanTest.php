@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportPlan;
@@ -27,7 +28,7 @@ final class ExportPlanTest extends TestCaseWithoutDatabase
 
         $this->assertSame(['total', 'number'], array_keys($plan->columns));
         $this->assertSame(['Total', 'Number'], $plan->headings());
-        $this->assertSame([true, false], $plan->numeric());
+        $this->assertSame([ColumnType::Number, null], $plan->types());
     }
 
     public function test_children_are_appended_after_document_columns(): void
@@ -36,7 +37,7 @@ final class ExportPlanTest extends TestCaseWithoutDatabase
 
         $this->assertSame('lines', $plan->childRelation);
         $this->assertSame(['Number', 'Qty', 'SKU'], $plan->headings());
-        $this->assertSame([false, true, false], $plan->numeric());
+        $this->assertSame([null, ColumnType::Number, null], $plan->types());
     }
 
     public function test_child_columns_are_ignored_when_children_are_not_included(): void
@@ -97,6 +98,6 @@ final class ExportPlanTest extends TestCaseWithoutDatabase
         $plan = ExportPlan::for(new OrderExportable, $this->dto([]));
 
         $this->assertSame([], $plan->headings());
-        $this->assertSame([], $plan->numeric());
+        $this->assertSame([], $plan->types());
     }
 }

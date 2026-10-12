@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Unit;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportWriter;
@@ -46,7 +47,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_starts_with_utf8_bom_then_header_row(): void
     {
-        $csv = $this->csv(['A', 'B'], [false, false], [['x', 'y']]);
+        $csv = $this->csv(['A', 'B'], [null, null], [['x', 'y']]);
 
         $this->assertStringStartsWith("\xEF\xBB\xBF".'A,B', $csv);
         $this->assertSame([['A', 'B'], ['x', 'y']], $this->parse($csv));
@@ -54,7 +55,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_follows_rfc4180_quoting(): void
     {
-        $csv = $this->csv(['h'], [false], [['a,b'], ['say "hi"'], ["line1\nline2"]]);
+        $csv = $this->csv(['h'], [null], [['a,b'], ['say "hi"'], ["line1\nline2"]]);
 
         $this->assertStringContainsString('"a,b"', $csv);
         $this->assertStringContainsString('"say ""hi"""', $csv);
@@ -63,7 +64,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_returns_row_count_excluding_header(): void
     {
-        $n = app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['h'], [false], [['1'], ['2'], ['3']], Storage::disk('local')->path('o.csv'));
+        $n = app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['h'], [null], [['1'], ['2'], ['3']], Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(3, $n);
     }
@@ -71,7 +72,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     public function test_csv_text_cells_starting_with_formula_characters_are_prefixed(): void
     {
         foreach (['=SUM(A1)', '+1', '-1', '@cmd', "\tx", "\rx"] as $value) {
-            $parsed = $this->parse($this->csv(['h'], [false], [[$value]]));
+            $parsed = $this->parse($this->csv(['h'], [null], [[$value]]));
 
             $this->assertSame("'".$value, $parsed[1][0], 'cell: '.json_encode($value));
         }
@@ -79,7 +80,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_csv_plain_text_and_empty_cells_are_not_prefixed(): void
     {
-        $parsed = $this->parse($this->csv(['h', 'i'], [false, false], [['abc', 'z'], ['5-3', 'z'], ['', 'z']]));
+        $parsed = $this->parse($this->csv(['h', 'i'], [null, null], [['abc', 'z'], ['5-3', 'z'], ['', 'z']]));
 
         $this->assertSame('abc', $parsed[1][0]);
         $this->assertSame('5-3', $parsed[2][0]);
@@ -89,7 +90,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     /** Plan: "Numeric columns are never prefixed." */
     public function test_csv_numeric_values_in_numeric_columns_are_never_prefixed(): void
     {
-        $parsed = $this->parse($this->csv(['n'], [true], [[-5], ['-5'], ['-5.250000'], [-0.5], ['+7']]));
+        $parsed = $this->parse($this->csv(['n'], [ColumnType::Number], [[-5], ['-5'], ['-5.250000'], [-0.5], ['+7']]));
 
         $this->assertSame('-5', $parsed[1][0]);
         $this->assertSame('-5', $parsed[2][0]);
@@ -105,7 +106,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
             ExportFormat::XLSX,
             't',
             ['h'],
-            [false],
+            [null],
             [['=SUM(A1)'], ['+1'], ['-1'], ['@x']],
             Storage::disk('local')->path('o.xlsx'),
         );
@@ -122,7 +123,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numeric_column_stays_numeric(): void
     {
-        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [true], [['-5'], [12]], Storage::disk('local')->path('o.xlsx'));
+        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [ColumnType::Number], [['-5'], [12]], Storage::disk('local')->path('o.xlsx'));
 
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
 
@@ -134,7 +135,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     {
         foreach ([ExportFormat::CSV, ExportFormat::XLSX] as $format) {
             try {
-                app(ExportWriter::class)->store($format, 't', ['A'], [false], [['x']], '/nonexistent-dir/o.'.$format->value);
+                app(ExportWriter::class)->store($format, 't', ['A'], [null], [['x']], '/nonexistent-dir/o.'.$format->value);
                 $this->fail("{$format->value} writer ignored a failed write");
             } catch (ExportException $e) {
                 $this->assertSame('storage_write_failed', $e->errorCode);

@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+Cell types: `Enums\ColumnType` (`String`, `Number`, `Integer`, `Decimal`, `Percent`, `Currency`, `Boolean`, `Date`, `DateTime`, `Time`), `Column::as()`, and a `types` map on `ResourceExportable`. A column without a type reads each value; `ResourceExportable` recognises dates, booleans and numbers from the resource output. xlsx writes real Excel dates; boolean text, percent, currency, time and date formats are configurable.
+
+Breaking:
+
+- New required config keys: `style.time_format`, `style.boolean.{true,false}`, `style.xlsx.{percent_format,currency_format,date_format,datetime_format,time_format}`.
+- `Writer::write()` and `ExportWriter::store()` take a list of `?ColumnType` instead of a list of numeric flags; `ExportPlan::numeric()` is `types()`; `Column::isDate()` is gone (`type()`).
+- Values reach the writers typed: a date stays a date object and a boolean stays a boolean (it used to be formatted text and `1`/`0`); the writer formats them. A column without a type now writes ints and floats as numbers and booleans as `style.boolean` text.
+- `ExportBuilder` no longer takes an `ExportStyle`.
+
+## 0.4.0
 
 Breaking:
 

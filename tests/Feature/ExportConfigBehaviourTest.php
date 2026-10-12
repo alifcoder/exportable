@@ -13,6 +13,7 @@ use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportPlan;
 use Alif\Export\Helpers\ExportProgress;
+use Alif\Export\Helpers\ExportWriter;
 use Alif\Export\Tests\Concerns\MakesTasks;
 use Alif\Export\Tests\Fixtures\Order;
 use Alif\Export\Tests\Fixtures\OrderExportable;
@@ -20,6 +21,7 @@ use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /** Behaviour the host configures: no package defaults, progress events, date formats. */
@@ -120,7 +122,9 @@ final class ExportConfigBehaviourTest extends TestCase
         $plan = ExportPlan::for($exportable, new ExportCreateDTO('x', ExportFormat::CSV, ['moment', 'day'], false, [], null, []));
 
         $rows = iterator_to_array($builder->rows($plan, $builder->query($plan)), false);
+        $path = Storage::disk('local')->path('dates.csv');
+        app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['Moment', 'Day'], $plan->types(), $rows, $path);
 
-        $this->assertSame([['04.03.2026 05:06', '04.03.2026']], $rows);
+        $this->assertStringContainsString("\"04.03.2026 05:06\",04.03.2026\n", (string) file_get_contents($path));
     }
 }

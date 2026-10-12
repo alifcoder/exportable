@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
+use Carbon\CarbonInterface;
+use OpenSpout\Common\Entity\Cell\DateTimeCell;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
 use OpenSpout\Common\Entity\Row;
@@ -16,16 +19,14 @@ use OpenSpout\Writer\XLSX\Writer as SpoutWriter;
 
 /**
  * Streams rows to a local file, so memory stays flat. Text is always a StringCell: a leading "=" is never a
- * formula. Fonts, header look, number formats and column widths come from `export.style`.
+ * formula. Dates are real Excel dates. Fonts, header look, number and date formats and column widths come from
+ * `export.style`.
  */
 final class XlsxWriter implements Writer
 {
-    /** Excel keeps about 15 significant digits; longer numbers are written as exact text. */
-    private const int MAX_SAFE_DIGITS = 15;
-
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(string $title, array $headings, array $numeric, iterable $rows, string $path): int
+    public function write(string $title, array $headings, array $types, iterable $rows, string $path): int
     {
         $options = new Options;
 
@@ -47,13 +48,11 @@ final class XlsxWriter implements Writer
             $header = $this->headerStyle();
             $writer->addRow(new Row(array_map(fn (string $heading): StringCell => new StringCell($heading, $header), $headings)));
 
-            $base = $this->baseStyle();
-            $integer = (clone $base)->setFormat($this->style->integerFormat());
-            $decimal = (clone $base)->setFormat($this->style->numberFormat());
+            $styles = $this->cellStyles();
 
             $count = 0;
             foreach ($rows as $row) {
-                $writer->addRow(new Row($this->cells($row, $numeric, $base, $integer, $decimal)));
+                $writer->addRow(new Row($this->cells($row, $types, $styles)));
                 $count++;
             }
 
@@ -79,36 +78,45 @@ final class XlsxWriter implements Writer
         return $this->style->headerBold() ? $style->setFontBold() : $style;
     }
 
+    /** @return array<string, Style> A style per cell type, built once per file. */
+    private function cellStyles(): array
+    {
+        $format = fn (string $format): Style => (clone $this->baseStyle())->setFormat($format);
+
+        return [
+            ColumnType::String->value => $this->baseStyle(),
+            ColumnType::Integer->value => $format($this->style->integerFormat()),
+            ColumnType::Decimal->value => $format($this->style->numberFormat()),
+            ColumnType::Percent->value => $format($this->style->percentFormat()),
+            ColumnType::Currency->value => $format($this->style->currencyFormat()),
+            ColumnType::Date->value => $format($this->style->dateCellFormat()),
+            ColumnType::DateTime->value => $format($this->style->dateTimeCellFormat()),
+            ColumnType::Time->value => $format($this->style->timeCellFormat()),
+        ];
+    }
+
     /**
-     * @param  list<string|int|float|null>  $row
-     * @param  list<bool>  $numeric
-     * @return list<NumericCell|StringCell>
+     * @param  list<string|int|float|bool|CarbonInterface|null>  $row
+     * @param  list<ColumnType|null>  $types
+     * @param  array<string, Style>  $styles
+     * @return list<NumericCell|StringCell|DateTimeCell>
      */
-    private function cells(array $row, array $numeric, Style $base, Style $integer, Style $decimal): array
+    private function cells(array $row, array $types, array $styles): array
     {
         $cells = [];
 
         foreach ($row as $i => $value) {
-            $number = ($numeric[$i] ?? false) ? $this->asNumber($value) : null;
-            $cells[] = $number !== null
-                ? new NumericCell($number, is_int($number) ? $integer : $decimal)
-                : new StringCell((string) $value, $base);
+            $cell = TypedValue::of($types[$i] ?? null, $value);
+            $style = $styles[$cell->type->value] ?? $styles[ColumnType::String->value];
+
+            $cells[] = match ($cell->type) {
+                ColumnType::Integer, ColumnType::Decimal, ColumnType::Percent, ColumnType::Currency => new NumericCell($cell->value, $style),
+                ColumnType::Date, ColumnType::DateTime, ColumnType::Time => new DateTimeCell($cell->value->toDateTimeImmutable(), $style),
+                ColumnType::Boolean => new StringCell($this->style->booleanLabel($cell->value), $style),
+                default => new StringCell($cell->value, $style),
+            };
         }
 
         return $cells;
-    }
-
-    private function asNumber(string|int|float|null $value): int|float|null
-    {
-        if (is_int($value) || is_float($value)) {
-            return $this->digits((string) $value) <= self::MAX_SAFE_DIGITS ? $value : null;
-        }
-
-        return is_string($value) && is_numeric($value) && $this->digits($value) <= self::MAX_SAFE_DIGITS ? $value + 0 : null;
-    }
-
-    private function digits(string $number): int
-    {
-        return strlen(ltrim(str_replace(['-', '+', '.'], '', $number), '0'));
     }
 }

@@ -6,6 +6,7 @@ namespace Alif\Export\Helpers;
 
 use Alif\Export\Contracts\Exportable;
 use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Exceptions\ExportException;
 use Illuminate\Support\Str;
 
@@ -50,10 +51,10 @@ final readonly class ExportPlan
         return array_map(fn (Column $column): string => (string) __($column->label()), $this->allColumns());
     }
 
-    /** @return list<bool> */
-    public function numeric(): array
+    /** @return list<ColumnType|null> */
+    public function types(): array
     {
-        return array_map(fn (Column $column): bool => $column->isNumeric(), $this->allColumns());
+        return array_map(fn (Column $column): ?ColumnType => $column->type(), $this->allColumns());
     }
 
     /**

@@ -62,9 +62,27 @@ Errors raised by the service: `ValidationException` (filter / row cap), `ExportE
 | `stale_margin_seconds` | a quota slot never released (worker killed) expires `queue.timeout` + this many seconds after it was taken |
 | `events.finished` | dispatch `ExportFinished` when an export completes or fails; `false` silences it |
 | `progress.{enabled,min_rows,step_percent}` | broadcast `ExportProgressed` for exports of at least `min_rows` rows, at most every `step_percent` points, and a final 100 once the last row is written (the finished event then announces the file) |
-| `style.{date_format,datetime_format}` | PHP `date()` formats; `Column::date()` uses `date_format` |
+| `style.{date_format,datetime_format,time_format}` | PHP `date()` formats of dates in csv |
+| `style.boolean.{true,false}` | text of boolean cells in csv and xlsx; a translation key is translated |
 | `style.csv.{delimiter,enclosure,line_ending,bom}` | csv field separator and quote (single byte), row ending, UTF-8 byte order mark |
-| `style.xlsx.font`, `.header`, `.number_format`, `.integer_format`, `.column_width` | font, header look (ARGB colours), Excel number formats, width = heading length + padding clamped to min..max |
+| `style.xlsx.font`, `.header`, `.column_width` | font, header look (ARGB colours), width = heading length + padding clamped to min..max |
+| `style.xlsx.{integer_format,number_format,percent_format,currency_format}` | Excel number formats of whole, decimal, percent and currency cells |
+| `style.xlsx.{date_format,datetime_format,time_format}` | Excel formats (Excel syntax, e.g. `yyyy-mm-dd`) of date cells |
+
+## Column types
+A cell is written as its column's type, set with `Column::as(ColumnType::…)` (`numeric()` and `date()` are shortcuts) or, for `ResourceExportable`, the `types` map (`['discount' => ColumnType::Percent]`). A column without a type is read from each value, and `ResourceExportable` also recognises, from the first value it samples, the date (`2026-03-04`) and date-time (`2026-03-04T05:06:07Z`) text a resource renders, and a decimal numeric string by its key (`*_amount`, `*_price`, ...).
+
+| Type | xlsx cell | csv |
+|---|---|---|
+| `String` | text, never a formula | text, a leading `=` `+` `-` `@` is neutralised |
+| `Number` | whole or decimal by the value (`integer_format` / `number_format`) | the value as it came |
+| `Integer`, `Decimal` | number with `integer_format` / `number_format` | the value as it came |
+| `Percent` | number with `percent_format` (25 shows as 25.00%, it is not scaled) | the value as it came |
+| `Currency` | number with `currency_format` | the value as it came |
+| `Boolean` | text from `style.boolean` | text from `style.boolean` |
+| `Date`, `DateTime`, `Time` | a real Excel date with `xlsx.date_format`, `datetime_format`, `time_format` | text with the PHP formats of `style` |
+
+Dates arriving as text are parsed and shown in the `app.timezone`. A value that does not fit its type (text in a number column, a number over 15 digits, an unparsable date) is written as exact text, never rounded or dropped.
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.
@@ -73,7 +91,6 @@ Errors raised by the service: `ValidationException` (filter / row cap), `ExportE
 ## Layout and safety
 - Children are flattened: one row per child with document columns repeated; a document without children yields one row with blank child cells. Output order: `columns` then `child_columns`.
 - Caps count output rows. csv: formula-prefix guard on non-numeric columns; layout (delimiter, enclosure, line ending, BOM) from `style.csv`. xlsx: non-numeric cells are inert strings.
-- bool is `1`/`0`; override per column with a closure.
 - Lazy loading is blocked while exporting: columns declare the relations they need (`Column::make(...)->relations('customer')`; constrained loads such as `['lines' => fn ($q) => ...]` are accepted); `ResourceExportable` takes them from the host's `$with` list.
 
 ## Performance and sizing

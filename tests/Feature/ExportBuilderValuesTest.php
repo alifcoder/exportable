@@ -98,7 +98,13 @@ final class ExportBuilderValuesTest extends TestCase
             'empty' => Column::make('es', fn () => ''),
         ]);
 
-        $this->assertSame([[null, 'high', '2026-01-02 03:04:05', '2026-05-06 07:08:09', '1', '0', 7, 1.5, 'text', '']], $rows);
+        $this->assertCount(1, $rows);
+        [$null, $enum, $date, $immutable, $true, $false, $int, $float, $string, $empty] = $rows[0];
+        $this->assertNull($null);
+        $this->assertSame('high', $enum);
+        $this->assertSame('2026-01-02 03:04:05', $date->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-05-06 07:08:09', $immutable->format('Y-m-d H:i:s'));
+        $this->assertSame([true, false, 7, 1.5, 'text', ''], [$true, $false, $int, $float, $string, $empty]);
     }
 
     public function test_default_column_reads_the_attribute_named_by_the_key(): void

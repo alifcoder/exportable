@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers;
 
 use Alif\Export\Contracts\Exportable;
+use Alif\Export\Enums\ColumnType;
 use Alif\QueryFilter\Interfaces\EBFilterInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,6 +43,11 @@ final class ResourceExportable implements Exportable
     /** Keys ending like this are numeric when their value is a numeric string (decimals come as strings). */
     private const string NUMERIC_KEY = '/(sum|price|quantity|amount|total|rate|cost|balance|discount)$/';
 
+    /** An ISO 8601 date-time as Laravel serialises a date; a date alone. */
+    private const string DATETIME_VALUE = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/';
+
+    private const string DATE_VALUE = '/^\d{4}-\d{2}-\d{2}$/';
+
     private const int SAMPLE_ROWS = 20;
 
     /** Seconds a discovered column set is shared between requests and workers. */
@@ -61,6 +67,7 @@ final class ResourceExportable implements Exportable
      * @param  array<int|string, string|Closure>  $with  Relations the resource reads (Eloquent `with()` shapes); every column declares them.
      * @param  string|null  $childRelation  HasMany relation exported as children; null detects the first HasMany list in the resource.
      * @param  list<string>  $numeric  Keys always written as numbers.
+     * @param  array<string, ColumnType>  $types  Keys written as a given type; the rest are read from their values.
      */
     public function __construct(
         private readonly string $title,
@@ -71,6 +78,7 @@ final class ResourceExportable implements Exportable
         private readonly array $with = [],
         private readonly ?string $childRelation = null,
         private readonly array $numeric = [],
+        private readonly array $types = [],
     ) {
         $this->values = new WeakMap;
     }
@@ -118,7 +126,7 @@ final class ResourceExportable implements Exportable
     /**
      * The discovered keys, shared through the cache.
      *
-     * @return array{columns: array<string, bool>, child_columns: array<string, bool>, child: ?string}
+     * @return array{columns: array<string, ColumnType|null>, child_columns: array<string, ColumnType|null>, child: ?string}
      */
     private function layout(): array
     {
@@ -129,10 +137,10 @@ final class ResourceExportable implements Exportable
     {
         $with = array_map(fn (int|string $name, string|Closure $value): string => is_int($name) ? (string) $value : $name, array_keys($this->with), $this->with);
 
-        return 'export-layout:'.md5(implode('|', [self::class, $this->title, $this->model, $this->resource, (string) $this->childRelation, implode(',', $with), implode(',', $this->numeric)]));
+        return 'export-layout:'.md5(implode('|', [self::class, $this->title, $this->model, $this->resource, (string) $this->childRelation, implode(',', $with), implode(',', $this->numeric), json_encode(array_map(fn (ColumnType $type): string => $type->value, $this->types)), 'types-v1']));
     }
 
-    /** @return array{columns: array<string, bool>, child_columns: array<string, bool>, child: ?string} */
+    /** @return array{columns: array<string, ColumnType|null>, child_columns: array<string, ColumnType|null>, child: ?string} */
     private function discover(): array
     {
         $this->discovering = true;
@@ -144,7 +152,7 @@ final class ResourceExportable implements Exportable
         }
     }
 
-    /** @return array{columns: array<string, bool>, child_columns: array<string, bool>, child: ?string} */
+    /** @return array{columns: array<string, ColumnType|null>, child_columns: array<string, ColumnType|null>, child: ?string} */
     private function discoverLayout(): array
     {
         $rows = $this->sample();
@@ -170,8 +178,8 @@ final class ResourceExportable implements Exportable
         }
 
         return [
-            'columns' => $this->numericFlags($this->withoutShadowed($parents), $childKey),
-            'child_columns' => $this->numericFlags($this->withoutShadowed($children), null),
+            'columns' => $this->typesOf($this->withoutShadowed($parents), $childKey),
+            'child_columns' => $this->typesOf($this->withoutShadowed($children), null),
             'child' => $child,
         ];
     }
@@ -193,7 +201,7 @@ final class ResourceExportable implements Exportable
     }
 
     /**
-     * @param  array<string, bool>  $keys
+     * @param  array<string, ColumnType|null>  $keys
      * @param  list<string>|null  $taken  Document headings a child heading must not repeat.
      * @return array<string, Column>
      */
@@ -201,14 +209,18 @@ final class ResourceExportable implements Exportable
     {
         $columns = [];
 
-        foreach ($keys as $key => $numeric) {
+        foreach ($keys as $key => $type) {
             $label = $this->label($key);
             // A child heading equal to a document heading ("Total Sum") is prefixed with the child's name.
             if ($taken !== null && $child !== null && in_array($label, $taken, true)) {
                 $label = Str::headline(Str::singular($child)).' '.$label;
             }
 
-            $column = Column::make($label, fn (Model $row): mixed => $this->read($row, $key, $child))->numeric($numeric);
+            $column = Column::make($label, fn (Model $row): mixed => $this->read($row, $key, $child));
+
+            if ($type !== null) {
+                $column->as($type);
+            }
 
             // Any selection must load what the resource touches, so every column declares the relations.
             $columns[$key] = $relations === [] ? $column : $column->relations($relations);
@@ -219,21 +231,38 @@ final class ResourceExportable implements Exportable
 
     /**
      * @param  array<string, scalar|null>  $sample
-     * @return array<string, bool> Key => written as a number.
+     * @return array<string, ColumnType|null> Key => the type its cells are written as; null reads each value.
      */
-    private function numericFlags(array $sample, ?string $skipPrefix): array
+    private function typesOf(array $sample, ?string $skipPrefix): array
     {
-        $flags = [];
+        $types = [];
 
         foreach ($sample as $key => $value) {
             if ($skipPrefix !== null && ($key === $skipPrefix || str_starts_with($key, $skipPrefix.'.'))) {
                 continue;
             }
 
-            $flags[$key] = in_array($key, $this->numeric, true) || $this->looksNumeric($key, $value);
+            $types[$key] = $this->types[$key] ?? (in_array($key, $this->numeric, true) ? ColumnType::Number : $this->typeOf($key, $value));
         }
 
-        return $flags;
+        return $types;
+    }
+
+    /**
+     * A resource renders through JSON, so a date arrives as text and a decimal as a numeric string: those are
+     * recognised by their shape (and, for decimals, by the key), the rest by the value's own type.
+     */
+    private function typeOf(string $key, mixed $value): ?ColumnType
+    {
+        return match (true) {
+            is_bool($value) => ColumnType::Boolean,
+            is_int($value), is_float($value) => ColumnType::Number,
+            ! is_string($value) => null,
+            preg_match(self::DATETIME_VALUE, $value) === 1 => ColumnType::DateTime,
+            preg_match(self::DATE_VALUE, $value) === 1 => ColumnType::Date,
+            is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => ColumnType::Number,
+            default => null,
+        };
     }
 
     /**
@@ -378,13 +407,6 @@ final class ResourceExportable implements Exportable
             && $method->getDeclaringClass()->getName() !== Model::class
             && $type instanceof ReflectionNamedType
             && is_a($type->getName(), HasMany::class, true);
-    }
-
-    private function looksNumeric(string $key, mixed $value): bool
-    {
-        return is_int($value)
-            || is_float($value)
-            || (is_string($value) && is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1);
     }
 
     /** Top-level keys use the attribute translation; nested ones read "Business Partner Name", never a bare "name". */

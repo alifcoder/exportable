@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Unit;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Helpers\ExportWriter;
 use Alif\Export\Tests\TestCase;
@@ -21,7 +22,7 @@ final class XlsxPrecisionTest extends TestCase
             ExportFormat::XLSX,
             't',
             ['id', 'qty'],
-            [false, true],
+            [null, ColumnType::Number],
             [[12345678901234567, 5]],
             Storage::disk('local')->path('x.xlsx'),
         );

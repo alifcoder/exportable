@@ -51,9 +51,13 @@ return [
     ],
 
     'style' => [
-        // PHP date() formats of date values (Column::date() uses date_format, other dates datetime_format).
+        // PHP date() formats of dates in csv (xlsx dates are real Excel dates, formatted by style.xlsx below).
         'date_format' => 'Y-m-d',
         'datetime_format' => 'Y-m-d H:i:s',
+        'time_format' => 'H:i:s',
+
+        // Text of boolean cells (csv and xlsx); a translation key is translated.
+        'boolean' => ['true' => 'Yes', 'false' => 'No'],
 
         'csv' => [
             // Single-byte characters.
@@ -76,6 +80,12 @@ return [
             // Excel number formats of numeric cells.
             'number_format' => '#,##0.00',
             'integer_format' => '#,##0',
+            'percent_format' => '0.00"%"',
+            'currency_format' => '#,##0.00',
+            // Excel formats of date cells (Excel syntax, not PHP date()): real dates, sortable and filterable.
+            'date_format' => 'yyyy-mm-dd',
+            'datetime_format' => 'yyyy-mm-dd hh:mm:ss',
+            'time_format' => 'hh:mm:ss',
             // Column width in characters: heading length + padding, clamped to min..max.
             'column_width' => ['min' => 10, 'max' => 60, 'padding' => 4],
         ],

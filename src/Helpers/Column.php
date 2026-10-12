@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
+use Alif\Export\Enums\ColumnType;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,9 +13,7 @@ final class Column
     /** @var array<string, Closure|null> Relation name => constraint (null: plain eager load). */
     private array $relations = [];
 
-    private bool $numeric = false;
-
-    private bool $date = false;
+    private ?ColumnType $type = null;
 
     private function __construct(private readonly string $label, private readonly ?Closure $value) {}
 
@@ -42,24 +41,33 @@ final class Column
         return $this;
     }
 
+    /** Write the cells as this type; without one each cell keeps the type of its value. */
+    public function as(ColumnType $type): self
+    {
+        $this->type = $type;
+
+        return $this;
+    }
+
+    /** A number, whole or decimal by the value of each cell. */
     public function numeric(bool $numeric = true): self
     {
-        $this->numeric = $numeric;
+        $this->type = $numeric ? ColumnType::Number : null;
 
         return $this;
     }
 
-    /** Format a date/time value with `export.style.date_format` (no time) instead of the date-time format. */
+    /** A date without time (`export.style.date_format`). */
     public function date(bool $date = true): self
     {
-        $this->date = $date;
+        $this->type = $date ? ColumnType::Date : null;
 
         return $this;
     }
 
-    public function isDate(): bool
+    public function type(): ?ColumnType
     {
-        return $this->date;
+        return $this->type;
     }
 
     public function label(): string
@@ -69,7 +77,7 @@ final class Column
 
     public function isNumeric(): bool
     {
-        return $this->numeric;
+        return $this->type?->isNumeric() ?? false;
     }
 
     /** @return array<string, Closure|null> */

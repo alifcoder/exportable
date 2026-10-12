@@ -18,8 +18,6 @@ use Illuminate\Validation\ValidationException;
 
 final class ExportBuilder
 {
-    public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
-
     /** Apply the host filter, then own eager loading and ordering. */
     public function query(ExportPlan $plan): Builder
     {
@@ -251,27 +249,26 @@ final class ExportBuilder
 
     /**
      * @param  array<string, Column>  $columns
-     * @return list<string|int|float|null>
+     * @return list<string|int|float|bool|CarbonInterface|null>
      */
     private function values(array $columns, Model $model): array
     {
         $values = [];
 
         foreach ($columns as $key => $column) {
-            $values[] = $this->normalize($column->resolve($model, $key), $key, $column->isDate());
+            $values[] = $this->normalize($column->resolve($model, $key), $key);
         }
 
         return $values;
     }
 
-    private function normalize(mixed $value, string $key, bool $date): string|int|float|null
+    /** Dates and booleans stay typed: the writer formats them. */
+    private function normalize(mixed $value, string $key): string|int|float|bool|CarbonInterface|null
     {
         return match (true) {
             $value === null => null,
             $value instanceof BackedEnum => $value->value,
-            $value instanceof CarbonInterface => $value->format($date ? $this->style->dateFormat() : $this->style->dateTimeFormat()),
-            is_bool($value) => $value ? '1' : '0',
-            is_scalar($value) => $value,
+            $value instanceof CarbonInterface, is_scalar($value) => $value,
             default => throw ExportException::invalidColumnValue($key),
         };
     }

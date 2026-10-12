@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
+use Carbon\CarbonInterface;
 
 final class CsvWriter implements Writer
 {
@@ -13,7 +15,7 @@ final class CsvWriter implements Writer
 
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(string $title, array $headings, array $numeric, iterable $rows, string $path): int
+    public function write(string $title, array $headings, array $types, iterable $rows, string $path): int
     {
         $file = @fopen($path, 'wb');
 
@@ -34,7 +36,7 @@ final class CsvWriter implements Writer
 
             $count = 0;
             foreach ($rows as $row) {
-                fputcsv($file, $this->guard($row, $numeric), $delimiter, $enclosure, '', $lineEnding);
+                fputcsv($file, $this->cells($row, $types), $delimiter, $enclosure, '', $lineEnding);
                 $count++;
             }
 
@@ -45,22 +47,35 @@ final class CsvWriter implements Writer
     }
 
     /**
-     * @param  list<string|int|float|null>  $row
-     * @param  list<bool>  $numeric
-     * @return list<string|int|float|null>
+     * Numbers are written as they are; dates and booleans as text by `export.style`. Text that a spreadsheet would
+     * read as a formula is neutralised, a number never is.
+     *
+     * @param  list<string|int|float|bool|CarbonInterface|null>  $row
+     * @param  list<ColumnType|null>  $types
+     * @return list<string|int|float>
      */
-    private function guard(array $row, array $numeric): array
+    private function cells(array $row, array $types): array
     {
         $out = [];
 
-        foreach ($row as $i => $cell) {
-            // Exempt from formula neutralising only when the value really is a number, not by column flag alone.
-            $isNumber = ($numeric[$i] ?? false) && is_numeric($cell);
-            $out[] = ! $isNumber && is_string($cell) && $cell !== '' && in_array($cell[0], self::FORMULA_PREFIXES, true)
-                ? "'".$cell
-                : $cell;
+        foreach ($row as $i => $value) {
+            $cell = TypedValue::of($types[$i] ?? null, $value);
+
+            $out[] = match ($cell->type) {
+                ColumnType::Integer, ColumnType::Decimal, ColumnType::Percent, ColumnType::Currency => $cell->raw,
+                ColumnType::Boolean => $this->style->booleanLabel($cell->value),
+                ColumnType::Date => $cell->value->format($this->style->dateFormat()),
+                ColumnType::DateTime => $cell->value->format($this->style->dateTimeFormat()),
+                ColumnType::Time => $cell->value->format($this->style->timeFormat()),
+                default => $this->neutralised($cell->value),
+            };
         }
 
         return $out;
+    }
+
+    private function neutralised(string $text): string
+    {
+        return $text !== '' && in_array($text[0], self::FORMULA_PREFIXES, true) ? "'".$text : $text;
     }
 }

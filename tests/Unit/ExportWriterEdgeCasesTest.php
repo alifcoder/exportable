@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Unit;
 
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Helpers\Writers\CsvWriter;
 use Alif\Export\Helpers\Writers\XlsxWriter;
 use Alif\Export\Tests\TestCaseWithoutDatabase;
@@ -42,7 +43,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_with_no_rows_has_bom_and_header_only_and_returns_zero(): void
     {
-        $count = (new CsvWriter)->write('t', ['A', 'B'], [false, false], [], Storage::disk('local')->path('o.csv'));
+        $count = (new CsvWriter)->write('t', ['A', 'B'], [null, null], [], Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(0, $count);
         $this->assertSame("\xEF\xBB\xBFA,B\n", Storage::disk('local')->get('o.csv'));
@@ -51,7 +52,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
     public function test_csv_unicode_survives_byte_for_byte(): void
     {
         $values = ['Тошкент шаҳри', 'O‘zbekiston', '日本語', 'émoji 😀', 'ñandú'];
-        $out = $this->csv(['h'], [false], array_map(fn (string $v): array => [$v], $values));
+        $out = $this->csv(['h'], [null], array_map(fn (string $v): array => [$v], $values));
 
         foreach ($values as $v) {
             $this->assertStringContainsString($v, $out);
@@ -61,14 +62,14 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_null_becomes_an_empty_cell(): void
     {
-        $out = $this->csv(['a', 'b', 'c'], [false, false, false], [['x', null, 'z']]);
+        $out = $this->csv(['a', 'b', 'c'], [null, null, null], [['x', null, 'z']]);
 
         $this->assertSame("a,b,c\nx,,z\n", $out);
     }
 
     public function test_csv_backslash_is_not_an_escape_character(): void
     {
-        $out = $this->csv(['h'], [false], [['a\\"b'], ['c\\']]);
+        $out = $this->csv(['h'], [null], [['a\\"b'], ['c\\']]);
 
         $this->assertStringContainsString('"a\\""b"', $out);
         $this->assertStringContainsString("c\\\n", $out);
@@ -76,14 +77,14 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_numeric_flag_does_not_exempt_text_that_is_not_a_number(): void
     {
-        $out = $this->csv(['n'], [true], [['=1+1'], ['-abc'], ['@x'], ['+SUM(1)']]);
+        $out = $this->csv(['n'], [ColumnType::Number], [['=1+1'], ['-abc'], ['@x'], ['+SUM(1)']]);
 
         $this->assertSame("n\n'=1+1\n'-abc\n'@x\n'+SUM(1)\n", $out);
     }
 
     public function test_csv_numeric_column_keeps_scientific_and_decimal_numbers_unprefixed(): void
     {
-        $out = $this->csv(['n'], [true], [['-1.5e3'], ['+0.5'], [-0.0], [0]]);
+        $out = $this->csv(['n'], [ColumnType::Number], [['-1.5e3'], ['+0.5'], [-0.0], [0]]);
 
         $this->assertStringContainsString("-1.5e3\n", $out);
         $this->assertStringContainsString("+0.5\n", $out);
@@ -92,7 +93,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_large_numbers_are_written_exactly(): void
     {
-        $out = $this->csv(['n'], [true], [['12345678901234567890.123456'], [PHP_INT_MAX], ['-99999999999999999999']]);
+        $out = $this->csv(['n'], [ColumnType::Number], [['12345678901234567890.123456'], [PHP_INT_MAX], ['-99999999999999999999']]);
 
         $this->assertStringContainsString("12345678901234567890.123456\n", $out);
         $this->assertStringContainsString((string) PHP_INT_MAX."\n", $out);
@@ -101,7 +102,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_mid_string_formula_characters_are_left_alone(): void
     {
-        $out = $this->csv(['h'], [false], [['a=b'], ['x+y'], ['a@b.c'], [' =1']]);
+        $out = $this->csv(['h'], [null], [['a=b'], ['x+y'], ['a@b.c'], [' =1']]);
 
         $this->assertStringNotContainsString("'", $out);
     }
@@ -114,7 +115,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
             }
         })();
 
-        $count = (new CsvWriter)->write('t', ['h'], [false], $gen, Storage::disk('local')->path('o.csv'));
+        $count = (new CsvWriter)->write('t', ['h'], [null], $gen, Storage::disk('local')->path('o.csv'));
 
         $this->assertSame(2500, $count);
         $this->assertCount(2501, explode("\n", trim(Storage::disk('local')->get('o.csv'))));
@@ -122,8 +123,8 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_csv_overwrites_an_existing_file_instead_of_appending(): void
     {
-        $this->csv(['h'], [false], [['first']]);
-        $out = $this->csv(['h'], [false], [['second']]);
+        $this->csv(['h'], [null], [['first']]);
+        $out = $this->csv(['h'], [null], [['second']]);
 
         $this->assertStringNotContainsString('first', $out);
         $this->assertStringContainsString('second', $out);
@@ -134,7 +135,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
     public function test_xlsx_with_no_rows_has_only_the_header_and_returns_zero(): void
     {
         $count = 99;
-        $sheet = $this->sheet(['A', 'B'], [false, false], [], $count);
+        $sheet = $this->sheet(['A', 'B'], [null, null], [], $count);
 
         $this->assertSame(0, $count);
         $this->assertSame('A', (string) $sheet->getCell('A1')->getValue());
@@ -144,7 +145,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_unicode_round_trips(): void
     {
-        $sheet = $this->sheet(['Сарлавҳа'], [false], [['Тошкент 😀'], ['日本語']]);
+        $sheet = $this->sheet(['Сарлавҳа'], [null], [['Тошкент 😀'], ['日本語']]);
 
         $this->assertSame('Сарлавҳа', (string) $sheet->getCell('A1')->getValue());
         $this->assertSame('Тошкент 😀', (string) $sheet->getCell('A2')->getValue());
@@ -153,7 +154,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_null_cells_are_empty_strings_not_the_word_null(): void
     {
-        $sheet = $this->sheet(['a', 'b'], [false, true], [['x', null], [null, null]]);
+        $sheet = $this->sheet(['a', 'b'], [null, ColumnType::Number], [['x', null], [null, null]]);
 
         $this->assertSame('x', (string) $sheet->getCell('A2')->getValue());
         $this->assertContains((string) $sheet->getCell('B2')->getValue(), ['']);
@@ -162,7 +163,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numbers_up_to_15_digits_stay_numeric_and_longer_become_exact_text(): void
     {
-        $sheet = $this->sheet(['n'], [true], [['123456789012345'], ['1234567890123456'], ['12345678901234567890'], [PHP_INT_MAX], ['0.123456789012345'], ['0.1234567890123456']]);
+        $sheet = $this->sheet(['n'], [ColumnType::Number], [['123456789012345'], ['1234567890123456'], ['12345678901234567890'], [PHP_INT_MAX], ['0.123456789012345'], ['0.1234567890123456']]);
 
         $this->assertSame(DataType::TYPE_NUMERIC, $sheet->getCell('A2')->getDataType());
         foreach (['A3' => '1234567890123456', 'A4' => '12345678901234567890', 'A5' => (string) PHP_INT_MAX, 'A7' => '0.1234567890123456'] as $coord => $text) {
@@ -174,7 +175,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_leading_zeros_do_not_count_toward_the_precision_limit(): void
     {
-        $sheet = $this->sheet(['n'], [true], [['0000000000000000001']]);
+        $sheet = $this->sheet(['n'], [ColumnType::Number], [['0000000000000000001']]);
 
         $this->assertSame(DataType::TYPE_NUMERIC, $sheet->getCell('A2')->getDataType());
         $this->assertEquals(1, $sheet->getCell('A2')->getValue());
@@ -182,7 +183,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_non_numeric_text_in_a_numeric_column_stays_text(): void
     {
-        $sheet = $this->sheet(['n'], [true], [['abc'], ['=1+1'], ['']]);
+        $sheet = $this->sheet(['n'], [ColumnType::Number], [['abc'], ['=1+1'], ['']]);
 
         $this->assertSame('abc', (string) $sheet->getCell('A2')->getValue());
         $this->assertFalse($sheet->getCell('A3')->isFormula());
@@ -191,7 +192,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numeric_text_in_a_text_column_is_not_converted(): void
     {
-        $sheet = $this->sheet(['code'], [false], [['007'], ['1.50']]);
+        $sheet = $this->sheet(['code'], [null], [['007'], ['1.50']]);
 
         $this->assertSame('007', (string) $sheet->getCell('A2')->getValue());
         $this->assertSame('1.50', (string) $sheet->getCell('A3')->getValue());
@@ -199,7 +200,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_negative_decimal_and_float_values(): void
     {
-        $sheet = $this->sheet(['n'], [true], [['-10.500000'], [3.25], [-7]]);
+        $sheet = $this->sheet(['n'], [ColumnType::Number], [['-10.500000'], [3.25], [-7]]);
 
         $this->assertEquals(-10.5, $sheet->getCell('A2')->getValue());
         $this->assertEquals(3.25, $sheet->getCell('A3')->getValue());
@@ -208,7 +209,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_heading_that_looks_like_a_formula_is_text(): void
     {
-        $sheet = $this->sheet(['=1+1'], [false], []);
+        $sheet = $this->sheet(['=1+1'], [null], []);
 
         $this->assertFalse($sheet->getCell('A1')->isFormula());
         $this->assertSame('=1+1', (string) $sheet->getCell('A1')->getValue());
@@ -223,7 +224,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
             }
         })();
 
-        $sheet = $this->sheet(['n'], [true], $gen, $count);
+        $sheet = $this->sheet(['n'], [ColumnType::Number], $gen, $count);
 
         $this->assertSame(1500, $count);
         $this->assertSame(1501, $sheet->getHighestRow());
@@ -239,7 +240,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
         })();
 
         $this->expectException(\RuntimeException::class);
-        (new XlsxWriter)->write('t', ['h'], [false], $gen, Storage::disk('local')->path('o.xlsx'));
+        (new XlsxWriter)->write('t', ['h'], [null], $gen, Storage::disk('local')->path('o.xlsx'));
     }
 
     public function test_xlsx_uses_the_configured_formats_header_style_and_widths(): void
@@ -252,7 +253,7 @@ final class ExportWriterEdgeCasesTest extends TestCaseWithoutDatabase
             'export.style.xlsx.column_width' => ['min' => 12, 'max' => 20, 'padding' => 2],
         ]);
 
-        (new XlsxWriter)->write('t', ['Short', 'A very very long heading indeed'], [true, true], [[7, 1.5]], Storage::disk('local')->path('o.xlsx'));
+        (new XlsxWriter)->write('t', ['Short', 'A very very long heading indeed'], [ColumnType::Number, ColumnType::Number], [[7, 1.5]], Storage::disk('local')->path('o.xlsx'));
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
 
         $this->assertSame('0000', $sheet->getStyle('A2')->getNumberFormat()->getFormatCode());

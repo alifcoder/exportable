@@ -17,6 +17,18 @@ final readonly class ExportStyle
         return ExportConfig::string('style.datetime_format');
     }
 
+    /** PHP `date()` format of time values in csv and text. */
+    public function timeFormat(): string
+    {
+        return ExportConfig::string('style.time_format');
+    }
+
+    /** The text of a boolean cell, translated when it is a translation key. */
+    public function booleanLabel(bool $value): string
+    {
+        return (string) __(ExportConfig::string('style.boolean.'.($value ? 'true' : 'false')));
+    }
+
     /** Single-byte field separator of csv files. */
     public function csvDelimiter(): string
     {
@@ -83,6 +95,36 @@ final readonly class ExportStyle
     public function integerFormat(): string
     {
         return ExportConfig::string('style.xlsx.integer_format');
+    }
+
+    /** Excel number format of percent cells, e.g. `0.00"%"` (25 is shown as 25.00%). */
+    public function percentFormat(): string
+    {
+        return ExportConfig::string('style.xlsx.percent_format');
+    }
+
+    /** Excel number format of currency cells, e.g. `#,##0.00`. */
+    public function currencyFormat(): string
+    {
+        return ExportConfig::string('style.xlsx.currency_format');
+    }
+
+    /** Excel date format of date cells, e.g. `yyyy-mm-dd`. */
+    public function dateCellFormat(): string
+    {
+        return ExportConfig::string('style.xlsx.date_format');
+    }
+
+    /** Excel format of date-time cells, e.g. `yyyy-mm-dd hh:mm:ss`. */
+    public function dateTimeCellFormat(): string
+    {
+        return ExportConfig::string('style.xlsx.datetime_format');
+    }
+
+    /** Excel format of time cells, e.g. `hh:mm:ss`. */
+    public function timeCellFormat(): string
+    {
+        return ExportConfig::string('style.xlsx.time_format');
     }
 
     public function minColumnWidth(): float
