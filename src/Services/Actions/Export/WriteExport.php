@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services\Actions\Export;
 
-use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ColumnNode;
 use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportProgress;
+use Alif\Export\Helpers\Writers\Line;
+use Generator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 
@@ -41,19 +43,33 @@ final readonly class WriteExport
     private function write(ExportTask $task, string $path): int
     {
         $dto = $task->request;
-        $columns = $dto->columns;
+        $tree = ColumnNode::tree($dto->columns);
         $previous = Model::preventsLazyLoading();
         Model::preventLazyLoading();
 
         try {
             return $dto->format->writer()->write(
-                array_map(fn (ExportColumn $column): string => $column->label, $columns),
-                array_map(fn (ExportColumn $column) => $column->type, $columns),
-                $this->progress->track($task, $this->builder->rows($dto)),
+                $tree->headings(),
+                $tree->types(),
+                $this->lines($this->progress->track($task, $this->builder->documents($dto))),
                 $path,
+                $tree->widths(),
             );
         } finally {
             Model::preventLazyLoading($previous);
+        }
+    }
+
+    /**
+     * Progress counts documents; the writer wants their lines one after the other.
+     *
+     * @param  iterable<int, list<Line>>  $documents
+     * @return Generator<int, Line>
+     */
+    private function lines(iterable $documents): Generator
+    {
+        foreach ($documents as $lines) {
+            yield from $lines;
         }
     }
 }

@@ -137,7 +137,7 @@ final readonly class ExportStyle
         return (float) ExportConfig::get('style.xlsx.column_width.max');
     }
 
-    /** Characters added to the heading length when sizing a column. */
+    /** Characters added to the longest heading or value when sizing a column. */
     public function columnPadding(): float
     {
         return (float) ExportConfig::get('style.xlsx.column_width.padding');

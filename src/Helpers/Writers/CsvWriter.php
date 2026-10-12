@@ -15,7 +15,7 @@ final class CsvWriter implements Writer
 
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(array $headings, array $types, iterable $rows, string $path): int
+    public function write(array $headings, array $types, iterable $lines, string $path, array $widths = []): int
     {
         $file = @fopen($path, 'wb');
 
@@ -35,8 +35,10 @@ final class CsvWriter implements Writer
             fputcsv($file, $headings, $delimiter, $enclosure, '', $lineEnding);
 
             $count = 0;
-            foreach ($rows as $row) {
-                fputcsv($file, $this->cells($row, $types), $delimiter, $enclosure, '', $lineEnding);
+            foreach ($lines as $line) {
+                // A sub row sits `depth` columns to the right of its document row, under it.
+                $row = [...array_fill(0, $line->depth, ''), ...$this->cells($line->cells, $line->heading ? [] : $line->types)];
+                fputcsv($file, $row, $delimiter, $enclosure, '', $lineEnding);
                 $count++;
             }
 

@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers\Writers;
 
 use Alif\Export\Enums\ColumnType;
-use Carbon\CarbonInterface;
 
 interface Writer
 {
     /**
-     * @param  list<string>  $headings
-     * @param  list<ColumnType|null>  $types  Declared type per column; null reads the type of each value.
-     * @param  iterable<int, list<string|int|float|bool|CarbonInterface|null>>  $rows
+     * @param  list<string>  $headings  The document columns.
+     * @param  list<ColumnType|null>  $types  Declared type per document column; null reads the type of each value.
+     * @param  iterable<int, Line>  $lines  Document lines in order, each followed by its sub lines (see {@see Line}).
      * @param  string  $path  Local file the writer creates.
-     * @return int Rows written (excluding the heading row).
+     * @param  array<int, int>  $widths  Longest heading per absolute column position, sub columns included; empty sizes by `$headings`.
+     * @return int Lines written (excluding the heading row).
      */
-    public function write(array $headings, array $types, iterable $rows, string $path): int;
+    public function write(array $headings, array $types, iterable $lines, string $path, array $widths = []): int;
 }

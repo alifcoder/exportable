@@ -15,9 +15,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 trait HandlesExport
 {
+    private const int MAX_COLUMNS = 200;
+
+    /** Lists inside lists, counted from the document. */
+    private const int MAX_DEPTH = 5;
+
     /** @return array<string, mixed> The parameters the filter was built from. */
     abstract protected function params(): array;
 
@@ -80,20 +86,57 @@ trait HandlesExport
     {
         return [
             'format' => ['required', Rule::enum(ExportFormat::class)],
-            'columns' => ['required', 'array', 'min:1', 'max:200'],
+            'columns' => ['required', 'array', 'min:1', 'max:'.self::MAX_COLUMNS],
         ];
     }
 
     /**
-     * @param  array<string, string>  $columns  Validated by {@see exportRules()}.
+     * `key => heading`, and `list => {key => heading, ...}` for the columns read from each item of a list the resource
+     * renders (`products`); a list may hold further lists to any depth. Lists are written as sub rows below their parent.
+     *
+     * @param  array<string, string|array<string, mixed>>  $columns  Validated by {@see exportRules()}.
      * @return list<ExportColumn>
+     *
+     * @throws ValidationException
      */
     private function exportColumns(array $columns): array
+    {
+        $list = $this->flattenColumns($columns, []);
+
+        if (count($list) > self::MAX_COLUMNS) {
+            throw ValidationException::withMessages(['columns' => [sprintf('At most %d columns can be exported.', self::MAX_COLUMNS)]]);
+        }
+
+        if (array_filter($list, fn (ExportColumn $c): bool => $c->groups === []) === []) {
+            throw ValidationException::withMessages(['columns' => ['At least one column must come from the document itself, not from a list.']]);
+        }
+
+        return $list;
+    }
+
+    /**
+     * @param  array<string, mixed>  $columns
+     * @param  list<string>  $groups
+     * @return list<ExportColumn>
+     *
+     * @throws ValidationException
+     */
+    private function flattenColumns(array $columns, array $groups): array
     {
         $list = [];
 
         foreach ($columns as $key => $label) {
-            $list[] = new ExportColumn((string) $key, (string) $label);
+            if (! is_array($label)) {
+                $list[] = new ExportColumn((string) $key, (string) $label, null, $groups);
+
+                continue;
+            }
+
+            if (count($groups) >= self::MAX_DEPTH) {
+                throw ValidationException::withMessages(['columns' => [sprintf('Lists can be nested %d levels deep at most.', self::MAX_DEPTH)]]);
+            }
+
+            array_push($list, ...$this->flattenColumns($label, [...$groups, (string) $key]));
         }
 
         return $list;

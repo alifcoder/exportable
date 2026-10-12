@@ -7,11 +7,12 @@ namespace Alif\Export\Helpers\Writers;
 use Alif\Export\Enums\ColumnType;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
-use Carbon\CarbonInterface;
 use OpenSpout\Common\Entity\Cell\DateTimeCell;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
 use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\CellAlignment;
+use OpenSpout\Common\Entity\Style\CellVerticalAlignment;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Common\Exception\IOException;
 use OpenSpout\Writer\XLSX\Options;
@@ -26,14 +27,11 @@ final class XlsxWriter implements Writer
 {
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
-    public function write(array $headings, array $types, iterable $rows, string $path): int
+    public function write(array $headings, array $types, iterable $lines, string $path, array $widths = []): int
     {
         $options = new Options;
-
-        foreach ($headings as $i => $heading) {
-            $width = min($this->style->maxColumnWidth(), max($this->style->minColumnWidth(), mb_strlen($heading) + $this->style->columnPadding()));
-            $options->setColumnWidth($width, $i + 1);
-        }
+        // Longest text per column, sub rows included: it sizes the columns once every row is known.
+        $longest = $widths !== [] ? $widths : array_map(mb_strlen(...), $headings);
 
         $writer = new SpoutWriter($options);
         try {
@@ -48,32 +46,83 @@ final class XlsxWriter implements Writer
 
             $styles = $this->cellStyles();
 
+            // One byte per written row, the heading row first: how deep it sits, for the outline below.
+            $depths = "\0";
             $count = 0;
-            foreach ($rows as $row) {
-                $writer->addRow(new Row($this->cells($row, $types, $styles)));
+            foreach ($lines as $line) {
+                $cells = $line->heading
+                    ? $this->headings($line, $header, $longest)
+                    : $this->cells($line, $styles, $longest);
+                $writer->addRow(new Row([...array_fill(0, $line->depth, new StringCell('', null)), ...$cells]));
+                $depths .= chr(min(255, $line->depth));
                 $count++;
             }
-
-            return $count;
         } finally {
             $writer->close();
         }
+
+        (new XlsxPackage)->finish($path, $depths, $this->columnWidths($longest));
+
+        return $count;
     }
 
     private function baseStyle(): Style
     {
-        return (new Style)->setFontName($this->style->fontName())->setFontSize($this->style->fontSize());
+        return $this->centered((new Style)->setFontName($this->style->fontName())->setFontSize($this->style->fontSize()));
+    }
+
+    private function centered(Style $style): Style
+    {
+        return $style->setCellAlignment(CellAlignment::CENTER)->setCellVerticalAlignment(CellVerticalAlignment::CENTER);
+    }
+
+    /**
+     * Column widths in characters: the longest text plus padding, clamped to min..max.
+     *
+     * @param  array<int, int>  $longest
+     * @return array<int, float>
+     */
+    private function columnWidths(array $longest): array
+    {
+        return array_map(
+            fn (int $length): float => min($this->style->maxColumnWidth(), max($this->style->minColumnWidth(), $length + $this->style->columnPadding())),
+            $longest,
+        );
+    }
+
+    /**
+     * @param  array<int, int>  $longest
+     * @return list<StringCell>
+     */
+    private function headings(Line $line, Style $style, array &$longest): array
+    {
+        $cells = [];
+
+        foreach ($line->cells as $i => $heading) {
+            $text = (string) $heading;
+            $at = $line->depth + $i;
+            $longest[$at] = max($longest[$at] ?? 0, mb_strlen($text));
+            $cells[] = new StringCell($text, $style);
+        }
+
+        return $cells;
     }
 
     private function headerStyle(): Style
     {
-        $style = (new Style)
+        $style = $this->centered((new Style)
             ->setFontName($this->style->fontName())
             ->setFontSize($this->style->headerFontSize())
-            ->setFontColor($this->style->headerFontColor())
-            ->setBackgroundColor($this->style->headerBackground());
+            ->setFontColor($this->rgb($this->style->headerFontColor()))
+            ->setBackgroundColor($this->style->headerBackground()));
 
         return $this->style->headerBold() ? $style->setFontBold() : $style;
+    }
+
+    /** The style config holds ARGB; the spreadsheet library adds the alpha itself, so it takes the RGB part. */
+    private function rgb(string $argb): string
+    {
+        return substr($argb, -6);
     }
 
     /** @return array<string, Style> A style per cell type, built once per file. */
@@ -94,17 +143,16 @@ final class XlsxWriter implements Writer
     }
 
     /**
-     * @param  list<string|int|float|bool|CarbonInterface|null>  $row
-     * @param  list<ColumnType|null>  $types
      * @param  array<string, Style>  $styles
+     * @param  array<int, int>  $longest
      * @return list<NumericCell|StringCell|DateTimeCell>
      */
-    private function cells(array $row, array $types, array $styles): array
+    private function cells(Line $line, array $styles, array &$longest): array
     {
         $cells = [];
 
-        foreach ($row as $i => $value) {
-            $cell = TypedValue::of($types[$i] ?? null, $value);
+        foreach ($line->cells as $i => $value) {
+            $cell = TypedValue::of($line->types[$i] ?? null, $value);
             $style = $styles[$cell->type->value] ?? $styles[ColumnType::String->value];
 
             $cells[] = match ($cell->type) {
@@ -113,8 +161,26 @@ final class XlsxWriter implements Writer
                 ColumnType::Boolean => new StringCell($this->style->booleanLabel($cell->value), $style),
                 default => new StringCell($cell->value, $style),
             };
+
+            $at = $line->depth + $i;
+            $longest[$at] = max($longest[$at] ?? 0, $this->length($cell));
         }
 
         return $cells;
+    }
+
+    /** How many characters the cell shows: the text, a number with its separators and decimals, a date by its format. */
+    private function length(TypedValue $cell): int
+    {
+        return match ($cell->type) {
+            ColumnType::Integer => strlen(number_format((float) $cell->value, 0)),
+            ColumnType::Decimal, ColumnType::Currency => strlen(number_format((float) $cell->value, 2)),
+            ColumnType::Percent => strlen(number_format((float) $cell->value, 2)) + 1,
+            ColumnType::Date => strlen($this->style->dateCellFormat()),
+            ColumnType::DateTime => strlen($this->style->dateTimeCellFormat()),
+            ColumnType::Time => strlen($this->style->timeCellFormat()),
+            ColumnType::Boolean => mb_strlen($this->style->booleanLabel($cell->value)),
+            default => mb_strlen((string) $cell->value),
+        };
     }
 }

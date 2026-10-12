@@ -25,11 +25,12 @@ The list's own parameters plus two export parts, at the top level:
 ```json
 { "format": "excel",
   "columns": { "prefix-index": "Document Number", "outlet.name": "Outlet Name",
-               "products": { "sequence": "Sequence", "product.name": "Product", "quantity": "Quantity" } },
+               "products": { "sequence": "Sequence", "product.name": "Product", "quantity": "Quantity",
+                             "serials": { "imei": "IMEI" } } },
   "filter": {}, "sort": "-document_date", "search": "abc" }
 ```
 - `format`: `csv` or `excel` (a `.xlsx` file).
-- `columns`: resource key (dotted for nested objects) => heading. At most 200 columns, headings 1 to 150 characters. The stored file is named `<task id>.<ext>`; the client chooses the download name.
+- `columns`: resource key (dotted for nested objects) => heading. A list the resource renders (`products`) takes its own `key => heading` map, the keys read from each item; it may hold further lists (`serials`), up to 5 levels, and any number of sibling lists. At most 200 columns, headings 1 to 150 characters. The stored file is named `<task id>.<ext>`; the client chooses the download name.
 
 Errors raised on the request: `ValidationException` (422) for the export rules, the filter's parameters, an unknown column (`columns`), an empty result and the row cap (`format`); `ExportException` `too_many_active` (429).
 
@@ -45,7 +46,7 @@ Errors raised on the request: `ValidationException` (422) for the export rules, 
 | `style.{date_format,datetime_format,time_format}` | PHP `date()` formats of dates in csv |
 | `style.boolean.{true,false}` | text of boolean cells in csv and xlsx; a translation key is translated |
 | `style.csv.{delimiter,enclosure,line_ending,bom}` | csv field separator and quote (single byte), row ending, UTF-8 byte order mark |
-| `style.xlsx.font`, `.header`, `.column_width` | font, header look (ARGB colours), width = heading length + padding clamped to min..max |
+| `style.xlsx.font`, `.header`, `.column_width` | font, header look (ARGB colours), width = longest heading or value (sub rows included) + padding, clamped to min..max; cells and headings are centered |
 | `style.xlsx.{integer_format,number_format,percent_format,currency_format}` | Excel number formats of whole, decimal, percent and currency cells |
 | `style.xlsx.{date_format,datetime_format,time_format}` | Excel formats (Excel syntax, e.g. `yyyy-mm-dd`) of date cells |
 
@@ -67,6 +68,16 @@ Dates arriving as text are parsed and shown in the `app.timezone`. A value that 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.
 - `ExportProgressed` (`ShouldBroadcastNow`, private channel `export.{id}`, `export.progressed`): `id`, `percent`, `rows`, `total_rows`.
+
+## Lists (`products`)
+A list column group is written as sub rows under the document row, like the expandable list in the app:
+
+- xlsx: the document row, then for each list a heading row and a row per item, each item followed by its own lists. Sub rows sit one column further right per level and are grouped into an Excel outline, collapsed: the `+` beside a document row opens its items, the `+` beside an item opens its sub list. A list without items writes nothing (no `+`).
+- csv: the same rows, without grouping; a sub row is shifted right by its depth.
+
+Rules: the document needs at least one column of its own; lists inside list items must be listed in the filter's `$with` (`products.product`, `products.serials`), as lazy loading is blocked; a list that is empty in every sampled document is accepted with its keys untyped; a list of scalars (`tags`) is not a list.
+
+Counts: the request-time cap, empty check and progress total count documents. The cap is enforced again on written rows (sub rows and their heading rows included) while writing: a file pushed over it fails with `row_limit_exceeded`. `ExportProgressed.rows` counts documents; `ExportFinished.rows` counts written rows. xlsx grouping rewrites the sheet's row tags after writing, so large files take a few seconds longer.
 
 ## Layout and safety
 - Caps count output rows. csv: formula-prefix guard on non-numeric columns; layout (delimiter, enclosure, line ending, BOM) from `style.csv`. xlsx: non-numeric cells are inert strings.

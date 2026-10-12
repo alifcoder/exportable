@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Reads a model the way the API shows it: through its resource, flattened into dotted keys
- * (`business_partner.name`). The resource is the single source of values, so the relations it touches must be
+ * (`business_partner.name`); a list the resource renders (`products`) is kept apart, one flat map per item. The resource is the single source of values, so the relations it touches must be
  * eager loaded.
  */
 final class ResourceRows
@@ -27,28 +27,62 @@ final class ResourceRows
     /** @param class-string<JsonResource> $resource */
     public function __construct(private readonly string $resource) {}
 
-    /** @return array<string, scalar|null> The row's values by dotted key. */
-    public function values(Model $row): array
+    /**
+     * The row's values by dotted key, and each list the resource renders (`products`) as its items, each item read the same way.
+     *
+     * @return array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}
+     */
+    public function read(Model $row): array
     {
-        return $this->flatten($this->payload($row, false));
+        return $this->split($this->payload($row, false));
     }
 
     /**
      * The keys a resource yields, with the first non-null value seen for each. Nested objects that are null in every
-     * sampled row still contribute their keys through the blank model.
+     * sampled row still contribute their keys through the blank model. A list contributes the keys of its items, and
+     * so do the lists inside those.
      *
      * @param  iterable<Model>  $rows
-     * @return array<string, scalar|null>
+     * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
      */
     public function layout(iterable $rows, Model $blank): array
     {
-        $keys = [];
+        $layout = ['values' => [], 'lists' => []];
 
         foreach ([...$rows, $blank] as $row) {
-            $keys = $this->merge($keys, $this->flatten($this->payload($row, ! $row->exists)));
+            $layout = $this->absorb($layout, $this->split($this->payload($row, ! $row->exists)));
         }
 
-        return $this->withoutShadowed($keys);
+        return $this->unshadowed($layout);
+    }
+
+    /**
+     * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
+     * @param  array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}  $read
+     * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
+     */
+    private function absorb(array $layout, array $read): array
+    {
+        $layout['values'] = $this->merge($layout['values'], $read['values']);
+
+        foreach ($read['lists'] as $path => $items) {
+            $layout['lists'][$path] ??= ['values' => [], 'lists' => []];
+
+            foreach ($items as $item) {
+                $layout['lists'][$path] = $this->absorb($layout['lists'][$path], $item);
+            }
+        }
+
+        return $layout;
+    }
+
+    /**
+     * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
+     * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
+     */
+    private function unshadowed(array $layout): array
+    {
+        return ['values' => $this->withoutShadowed($layout['values']), 'lists' => array_map($this->unshadowed(...), $layout['lists'])];
     }
 
     /**
@@ -88,12 +122,26 @@ final class ResourceRows
     }
 
     /**
-     * Objects recurse into dotted keys; lists are dropped.
+     * @param  array<string, mixed>  $payload
+     * @return array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}
+     */
+    private function split(array $payload): array
+    {
+        $lists = [];
+        $values = $this->flatten($payload, '', $lists);
+
+        return ['values' => $values, 'lists' => $lists];
+    }
+
+    /**
+     * Objects recurse into dotted keys. A list of objects (or an empty list) is collected into `$lists` under its
+     * dotted key, each item split the same way; a list of scalars is dropped.
      *
      * @param  array<string, mixed>  $data
+     * @param  array<string, list<array<string, mixed>>>  $lists
      * @return array<string, scalar|null>
      */
-    private function flatten(array $data, string $prefix = ''): array
+    private function flatten(array $data, string $prefix, array &$lists): array
     {
         $flat = [];
 
@@ -102,7 +150,9 @@ final class ResourceRows
 
             if (is_array($value)) {
                 if (! array_is_list($value)) {
-                    $flat += $this->flatten($value, $path.'.');
+                    $flat += $this->flatten($value, $path.'.', $lists);
+                } elseif (array_filter($value, fn (mixed $item): bool => ! is_array($item) || array_is_list($item)) === []) {
+                    $lists[$path] = array_map($this->split(...), $value);
                 }
 
                 continue;

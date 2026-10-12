@@ -9,6 +9,7 @@ use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportRequest;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\Writers\Line;
 use BackedEnum;
 use Generator;
 use Illuminate\Database\Eloquent\Builder;
@@ -94,13 +95,14 @@ final class ExportBuilder
     }
 
     /**
-     * Reads the prepared SQL page by page, `chunk_size` models at a time, and yields one line per document. Nothing here reads the request or the signed-in user.
+     * The lines of every document in turn, one list per document: the document's own line, then for each requested
+     * list a heading line and a line per item, each item followed by its own lists. Nothing here reads the request or the signed-in user.
      *
-     * @return Generator<int, list<string|int|float|bool|null>>
+     * @return Generator<int, list<Line>>
      *
      * @throws ExportException
      */
-    public function rows(ExportCreateDTO $dto): Generator
+    public function documents(ExportCreateDTO $dto): Generator
     {
         $source = $dto->source::exportSource();
         $query = $dto->query;
@@ -110,6 +112,7 @@ final class ExportBuilder
         $with = $source['with'];
         $chunk = max(1, ExportConfig::int('chunk_size'));
         $cap = $dto->format->maxRows();
+        $tree = ColumnNode::tree($dto->columns);
         $offset = $query->offset;
         $remaining = $query->limit;
         $emitted = 0;
@@ -128,11 +131,14 @@ final class ExportBuilder
             $models->load($with);
 
             foreach ($models as $row) {
-                if (++$emitted > $cap) {
+                $lines = $this->lines($tree, $resource->read($row));
+                $emitted += count($lines);
+
+                if ($emitted > $cap) {
                     throw ExportException::rowLimitExceeded($cap);
                 }
 
-                yield $this->values($dto->columns, $resource->values($row));
+                yield $lines;
             }
 
             $offset += count($records);
@@ -146,23 +152,66 @@ final class ExportBuilder
 
     /**
      * @param  list<ExportColumn>  $requested
-     * @param  array<string, scalar|null>  $available
+     * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
      * @return list<ExportColumn>
      *
      * @throws ValidationException
      */
-    private function typed(array $requested, array $available): array
+    private function typed(array $requested, array $layout): array
     {
-        $unknown = array_values(array_filter($requested, fn (ExportColumn $c): bool => ! array_key_exists($c->key, $available) && ! $this->underNullObject($c->key, $available)));
+        $unknown = array_values(array_filter($requested, fn (ExportColumn $c): bool => ! $this->known($c, $layout)));
 
         if ($unknown !== []) {
             throw ValidationException::withMessages(['columns' => array_map(
-                fn (ExportColumn $c): string => sprintf('Unknown column "%s".', $c->key),
+                fn (ExportColumn $c): string => sprintf('Unknown column "%s".', implode('.', [...$c->groups, $c->key])),
                 $unknown,
             )]);
         }
 
-        return array_map(fn (ExportColumn $c): ExportColumn => $c->withType(ResourceRows::typeOf($c->key, $available[$c->key] ?? null)), $requested);
+        return array_map(
+            fn (ExportColumn $c): ExportColumn => $c->withType(ResourceRows::typeOf($c->key, ($this->levelOf($c, $layout) ?? ['values' => []])['values'][$c->key] ?? null)),
+            $requested,
+        );
+    }
+
+    /**
+     * The layout of the list a column belongs to: the document itself, or the items of its list, however deep.
+     *
+     * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
+     * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}|null
+     */
+    private function levelOf(ExportColumn $column, array $layout): ?array
+    {
+        foreach ($column->groups as $group) {
+            $layout = $layout['lists'][$group] ?? null;
+
+            if ($layout === null) {
+                return null;
+            }
+        }
+
+        return $layout;
+    }
+
+    /**
+     * A list that no sampled document has items for yields no keys to check: the list itself must exist in the
+     * resource, its keys are then accepted untyped.
+     *
+     * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
+     */
+    private function known(ExportColumn $column, array $layout): bool
+    {
+        $level = $this->levelOf($column, $layout);
+
+        if ($level === null) {
+            return false;
+        }
+
+        if ($column->groups !== [] && $level['values'] === [] && $level['lists'] === []) {
+            return true;
+        }
+
+        return array_key_exists($column->key, $level['values']) || $this->underNullObject($column->key, $level['values']);
     }
 
     /**
@@ -185,13 +234,32 @@ final class ExportBuilder
     }
 
     /**
-     * @param  list<ExportColumn>  $columns
-     * @param  array<string, scalar|null>  $values
-     * @return list<string|int|float|bool|null>
+     * @param  array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}  $read
+     * @return list<Line>
      */
-    private function values(array $columns, array $values): array
+    private function lines(ColumnNode $node, array $read): array
     {
-        return array_map(fn (ExportColumn $column): string|int|float|bool|null => $this->normalize($values[$column->key] ?? null, $column->key), $columns);
+        $lines = [new Line($node->depth, array_map(
+            fn (ExportColumn $column): string|int|float|bool|null => $this->normalize($read['values'][$column->key] ?? null, $column->key),
+            $node->columns,
+        ), $node->types())];
+
+        foreach ($node->children as $key => $child) {
+            $items = $read['lists'][$key] ?? [];
+
+            // A list without items writes nothing: no heading, nothing to expand.
+            if ($items === []) {
+                continue;
+            }
+
+            $lines[] = new Line($child->depth, $child->headings(), [], true);
+
+            foreach ($items as $item) {
+                array_push($lines, ...$this->lines($child, $item));
+            }
+        }
+
+        return $lines;
     }
 
     private function normalize(mixed $value, string $key): string|int|float|bool|null

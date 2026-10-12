@@ -80,7 +80,7 @@ return [
             'date_format' => 'yyyy-mm-dd',
             'datetime_format' => 'yyyy-mm-dd hh:mm:ss',
             'time_format' => 'hh:mm:ss',
-            // Column width in characters: heading length + padding, clamped to min..max.
+            // Column width in characters: the longest heading or value of the column (sub rows included) + padding, clamped to min..max.
             'column_width' => ['min' => 10, 'max' => 60, 'padding' => 4],
         ],
     ],

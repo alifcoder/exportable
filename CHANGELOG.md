@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+Added:
+
+- List columns: `columns` may hold `list => {key => heading}` (e.g. `products`), nested to 5 levels and as many sibling lists as wanted. They are written as sub rows below their document row; in xlsx as a collapsed Excel outline (`+` opens them), in csv indented by depth. `ExportColumn` gains `groups`, `Writers\Line` and `Helpers\ColumnNode` are new.
+
+Changed:
+
+- xlsx: cells and headings are centered, and a column is as wide as its longest heading or value (it was the heading only), clamped to `column_width.min..max`.
+- xlsx: the header font color is passed as RGB (the ARGB config value was doubled to an invalid color). The empty comments parts the xlsx library adds are removed (WPS based editors refuse them), and matching `XlsxPackage` finishes the file.
+
 Breaking:
 
-- Child rows are gone: `columns` is a flat `key => heading` map (a nested object is rejected), `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns`, `ExportBuilder::assertChildRelation()` is removed.
+- `ExportBuilder::rows()` is `documents()` (one list of `Line`s per document); `ResourceRows::values()` is `read()` and `layout()` returns nested `values` and `lists`. `Writer::write()` takes `Line`s and the column widths. `ExportColumn::toArray()` carries `groups`.
+- `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns` (lists are now columns with a `group`), `ExportBuilder::assertChildRelation()` is removed.
 - The package no longer knows who asked: `HandlesExport::export()` and `ExportServiceInterface::create()` take no owner, `ExportTask::$ownerId` is gone. With it go the per-owner quota (`ExportQuota`, `max_active_per_user`, `ExportException::tooManyActive()`/`forbidden()`/`ownerMissing()`, `httpStatus()`/`report()`/`render()`). `stale_margin_seconds` now only sets how long the "finished" announcement is remembered.
 - `ExportProgressed` broadcasts on the private channel `export.{id}` (was `App.Models.User.{ownerId}`) and has no `ownerId`.
 - `Writer::write()` takes no title; the xlsx sheet keeps the default name. `ExportFileName` is removed: the stored file is named `<task id>.<ext>` instead of after the filter class.
