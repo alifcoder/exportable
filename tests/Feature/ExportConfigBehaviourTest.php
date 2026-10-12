@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Feature;
 
 use Alif\Export\DTO\Export\ExportCreateDTO;
+use Alif\Export\DTO\Export\ExportTask;
+use Alif\Export\DTO\Export\PreparedQuery;
+use Alif\Export\Enums\ColumnType;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Events\ExportProgressed;
 use Alif\Export\Exceptions\ExportException;
-use Alif\Export\Helpers\Column;
-use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportConfig;
-use Alif\Export\Helpers\ExportPlan;
 use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Helpers\ExportWriter;
-use Alif\Export\Tests\Concerns\MakesTasks;
-use Alif\Export\Tests\Fixtures\Order;
-use Alif\Export\Tests\Fixtures\OrderExportable;
+use Alif\Export\Tests\Fixtures\OrderFilter;
 use Alif\Export\Tests\Fixtures\User;
 use Alif\Export\Tests\TestCase;
 use Illuminate\Support\Carbon;
@@ -27,8 +25,6 @@ use RuntimeException;
 /** Behaviour the host configures: no package defaults, progress events, date formats. */
 final class ExportConfigBehaviourTest extends TestCase
 {
-    use MakesTasks;
-
     private User $user;
 
     protected function setUp(): void
@@ -36,6 +32,13 @@ final class ExportConfigBehaviourTest extends TestCase
         parent::setUp();
 
         $this->user = User::create(['name' => 'u']);
+    }
+
+    private function makeTask(User $owner, ?int $total = null): ExportTask
+    {
+        $dto = new ExportCreateDTO(OrderFilter::class, ExportFormat::CSV, [], null, [], new PreparedQuery(null, 'select 1', [], 0, null));
+
+        return new ExportTask('00000000-0000-4000-8000-000000000001', (string) $owner->getKey(), 'en', $dto, $total);
     }
 
     /** @return list<list<int>> */
@@ -67,7 +70,7 @@ final class ExportConfigBehaviourTest extends TestCase
     {
         Event::fake([ExportProgressed::class]);
         config(['export.progress' => ['enabled' => true, 'min_rows' => 10, 'step_percent' => 20]]);
-        $task = $this->makeTask($this->user, total: 100);
+        $task = $this->makeTask($this->user, 100);
 
         $out = iterator_to_array(app(ExportProgress::class)->track($task, $this->rows(100)), false);
 
@@ -83,13 +86,13 @@ final class ExportConfigBehaviourTest extends TestCase
         Event::fake([ExportProgressed::class]);
 
         config(['export.progress' => ['enabled' => false, 'min_rows' => 1, 'step_percent' => 1]]);
-        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, total: 100), $this->rows(100)));
+        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, 100), $this->rows(100)));
 
         config(['export.progress' => ['enabled' => true, 'min_rows' => 101, 'step_percent' => 1]]);
-        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, total: 100), $this->rows(100)));
+        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, 100), $this->rows(100)));
 
         config(['export.progress' => ['enabled' => true, 'min_rows' => 1, 'step_percent' => 1]]);
-        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, total: null), $this->rows(10)));
+        iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, null), $this->rows(10)));
 
         Event::assertNotDispatched(ExportProgressed::class);
     }
@@ -99,7 +102,7 @@ final class ExportConfigBehaviourTest extends TestCase
         config(['export.progress' => ['enabled' => true, 'min_rows' => 1, 'step_percent' => 10]]);
         Event::listen(ExportProgressed::class, fn () => throw new RuntimeException('socket down'));
 
-        $out = iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, total: 50), $this->rows(50)), false);
+        $out = iterator_to_array(app(ExportProgress::class)->track($this->makeTask($this->user, 50), $this->rows(50)), false);
 
         $this->assertCount(50, $out);
     }
@@ -107,23 +110,11 @@ final class ExportConfigBehaviourTest extends TestCase
     public function test_dates_use_the_configured_formats_and_a_date_column_drops_the_time(): void
     {
         config(['export.style.date_format' => 'd.m.Y', 'export.style.datetime_format' => 'd.m.Y H:i']);
-        Order::create(['number' => 'A', 'total' => '1']);
-        $builder = new ExportBuilder;
-        $exportable = new class extends OrderExportable
-        {
-            public function columns(): array
-            {
-                return [
-                    'moment' => Column::make('Moment', fn () => Carbon::parse('2026-03-04 05:06:07')),
-                    'day' => Column::make('Day', fn () => Carbon::parse('2026-03-04 05:06:07'))->date(),
-                ];
-            }
-        };
-        $plan = ExportPlan::for($exportable, new ExportCreateDTO('x', ExportFormat::CSV, ['moment', 'day'], false, [], null, []));
-
-        $rows = iterator_to_array($builder->rows($plan, $builder->query($plan)), false);
+        $moment = Carbon::parse('2026-03-04 05:06:07');
         $path = Storage::disk('local')->path('dates.csv');
-        app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['Moment', 'Day'], $plan->types(), $rows, $path);
+        Storage::fake('local');
+
+        app(ExportWriter::class)->store(ExportFormat::CSV, 't', ['Moment', 'Day'], [ColumnType::DateTime, ColumnType::Date], [[$moment, $moment]], $path);
 
         $this->assertStringContainsString("\"04.03.2026 05:06\",04.03.2026\n", (string) file_get_contents($path));
     }

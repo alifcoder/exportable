@@ -6,7 +6,6 @@ namespace Alif\Export\Tests;
 
 use Alif\Export\Contracts\ExportFileStore;
 use Alif\Export\Providers\ExportServiceProvider;
-use Alif\Export\Tests\Fixtures\ActingAsOwner;
 use Alif\Export\Tests\Fixtures\DiskFileStore;
 use Alif\Export\Tests\Fixtures\User;
 use Illuminate\Support\Facades\Schema;
@@ -44,7 +43,6 @@ abstract class TestCase extends Orchestra
         $app['config']->set('export', require __DIR__.'/../config/export.php');
         $app['config']->set('export.queue.name', null);
         $app['config']->set('export.ttl_hours', 24);
-        $app['config']->set('export.queue.middleware', [ActingAsOwner::class]);
 
         $app->bind(ExportFileStore::class, DiskFileStore::class);
     }

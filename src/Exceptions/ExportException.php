@@ -14,19 +14,9 @@ final class ExportException extends RuntimeException
         parent::__construct($message);
     }
 
-    public static function unknownExportable(string $key): self
-    {
-        return new self(sprintf('Unknown exportable "%s".', $key), 'unknown_exportable');
-    }
-
     public static function invalidRegistration(string $message): self
     {
         return new self($message, 'invalid_registration');
-    }
-
-    public static function unknownColumn(string $key): self
-    {
-        return new self(sprintf('Column "%s" no longer exists in the export definition.', $key), 'unknown_column');
     }
 
     public static function rowLimitExceeded(int $cap): self

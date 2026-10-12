@@ -35,7 +35,7 @@ final class ExportWriter
     {
         return match ($format) {
             ExportFormat::CSV => new CsvWriter,
-            ExportFormat::XLSX => new XlsxWriter,
+            ExportFormat::EXCEL => new XlsxWriter,
         };
     }
 }

@@ -103,7 +103,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
     public function test_xlsx_formula_like_and_plus_text_are_string_cells(): void
     {
         app(ExportWriter::class)->store(
-            ExportFormat::XLSX,
+            ExportFormat::EXCEL,
             't',
             ['h'],
             [null],
@@ -123,7 +123,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_xlsx_numeric_column_stays_numeric(): void
     {
-        app(ExportWriter::class)->store(ExportFormat::XLSX, 't', ['n'], [ColumnType::Number], [['-5'], [12]], Storage::disk('local')->path('o.xlsx'));
+        app(ExportWriter::class)->store(ExportFormat::EXCEL, 't', ['n'], [ColumnType::Number], [['-5'], [12]], Storage::disk('local')->path('o.xlsx'));
 
         $sheet = IOFactory::load(Storage::disk('local')->path('o.xlsx'))->getActiveSheet();
 
@@ -133,7 +133,7 @@ final class ExportWriterTest extends TestCaseWithoutDatabase
 
     public function test_an_unwritable_path_throws_instead_of_reporting_success(): void
     {
-        foreach ([ExportFormat::CSV, ExportFormat::XLSX] as $format) {
+        foreach ([ExportFormat::CSV, ExportFormat::EXCEL] as $format) {
             try {
                 app(ExportWriter::class)->store($format, 't', ['A'], [null], [['x']], '/nonexistent-dir/o.'.$format->value);
                 $this->fail("{$format->value} writer ignored a failed write");

@@ -1,57 +1,37 @@
 # alifcoder/exportable
 
-Async document export (csv, xlsx) for Laravel, built on `alifcoder/query-filter` (`^2.0.1`, enforced by Composer).
+Async document export (csv, excel) for Laravel, built on `alifcoder/query-filter` (`^2.0.1`, enforced by Composer).
 
 The package is host-driven and **stateless**: it ships **no routes, no controllers, no database table, no schedule, no config defaults and no file storage**. The host provides the configuration, the endpoints, the permission check, the place files are kept and the list of finished exports.
 
 ## Flow
-The host's endpoint calls `ExportServiceInterface::create($owner, $dto)`: it takes a quota slot (cache), applies the host filter, counts the output rows once (cap and progress total) and queues `RunExport` with an `ExportTask` (id, owner id, locale, request, row total). The host authorises the owner before calling (`definition()` and `create()` check nothing but the key). The job passes through the host's `queue.middleware`, which signs the owner in (so the host filter's `before()` scope applies) and re-checks the permission, then streams rows with `lazy()`, flattens children, writes a **local temporary file**, hands it to the host's `ExportFileStore` (e.g. as an attachment), removes the temporary file, frees the quota slot and dispatches `ExportFinished` (completed or failed, with an error code). While it runs, `ExportProgressed` events tell the owner's client how far it is. Nothing is persisted by the package; the host keeps whatever it needs from `ExportFinished`.
+The host's filter uses `Concerns\HandlesExport`; its endpoint calls `$filter->export()` after authorising the user. On that request, and before any job exists, the package: validates `format` and `columns` and the filter's own parameters, applies the filter (so the caller's data limits are in the query), checks every requested column against what the filter's resource yields for a sample of rows (and reads each column's type from it), counts the output rows once (cap, empty check and progress total), takes a quota slot (cache) and compiles the query into SQL + bindings. It then queues `RunExport` with an `ExportTask` (id, owner id, locale, the prepared query, columns, row total).
+
+The job needs no signed-in user and does not rebuild the filter: it reads the prepared SQL page by page (`chunk_size` rows at a time, `limit/offset` after the stable order), hydrates the models, eager loads the filter's `$with` relations, renders each model through the resource, flattens children, writes a **local temporary file**, hands it to the host's `ExportFileStore`, removes the temporary file, frees the quota slot and dispatches `ExportFinished` (completed or failed, with an error code). While it runs, `ExportProgressed` events tell the owner's client how far it is. Nothing is persisted by the package; the host keeps whatever it needs from `ExportFinished`.
+
+Paging is by offset over a query ordered by the filter's sort and then the key, so rows inserted or deleted *while the job runs* can shift a page. Postgres, MySQL/MariaDB and SQLite are supported.
 
 ## Install
 1. `composer require alifcoder/exportable`
 2. `php artisan vendor:publish --tag=export-config`, set **every** key in `config/export.php` (a missing one fails with `Missing export configuration "export.<key>"`).
 3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id). Links, listing and deletion are the host's. There is no auth contract and no gate/ability/guard setting.
-4. Write your own endpoints over `Services\Interfaces\ExportServiceInterface` (`definition($key)`, `create($owner, $dto)`), authorise the user there, and listen to `ExportFinished`.
-5. List job middleware classes in `queue.middleware` (resolved from the container, required key, `[]` for none). A middleware receives the `RunExport` job (`$job->task` is `ExportTask::toArray()`), signs the owner in, re-checks the permission and calls `$next($job)`. An `ExportException` it throws fails the export with that error code:
-
-   ```php
-   final class ExportAsOwner
-   {
-       public function handle(RunExport $job, Closure $next): mixed
-       {
-           $owner = User::find($job->task['owner_id']) ?? throw ExportException::ownerMissing();
-
-           if (! Gate::forUser($owner)->allows('viewAny', ...)) {
-               throw ExportException::forbidden();
-           }
-
-           Auth::shouldUse('api');
-           Auth::guard('api')->setUser($owner); // restore the previous user/guard afterwards
-
-           return $next($job);
-       }
-   }
-   ```
-6. Run a queue worker for `queue.name` with enough memory/timeout for xlsx. The queue connection's `retry_after` must exceed `queue.timeout`, otherwise a second worker picks up the running job. The quota needs a cache store with atomic locks. Discovered `ResourceExportable` columns are cached for 10 minutes in the default cache store.
-7. Authorize the private channel `App.Models.User.{id}` (Laravel's default user channel) if you use progress events.
-
-## Documents: extend the registry
-Nothing is declared per document. Bind a subclass of `Helpers\ExportRegistry` and override `keys()`, `has($key)` and `get($key): Exportable`; return a `Helpers\ResourceExportable` built from a model, its API resource, a filter closure and a base-query closure (both receive the request's `data` parameters; the base query is where the host's own list defaults belong) and the columns are discovered from the resource output (`business_partner.name`), the children from its HasMany list (`products`). Hand-written `Contracts\Exportable` classes still work (`register`, `registerUsing`); they implement `query(array $parameters)` for the base query.
-
-```php
-$this->app->singleton(ExportRegistry::class, MyRegistry::class);
-```
+4. Use `Concerns\HandlesExport` in your filter base class and implement `Contracts\ExportSource` (the trait provides `exportSource()`). The filter must provide `static $model`, `static $resource`, `givenParameters()`, `prepare()`, `apply()` and `getWith()`. Optional hooks: `exportQuery()` (start from the filter's own selects/counts/ordering instead of the bare model) and `exportWindow($query)` (limit to the page the list shows). Write the endpoint, authorise the user there, call `$filter->export()`, and listen to `ExportFinished`.
+5. Run a queue worker for `queue.name` with enough memory/timeout for xlsx. The queue connection's `retry_after` must exceed `queue.timeout`, otherwise a second worker picks up the running job. The quota needs a cache store with atomic locks.
+6. Authorize the private channel `App.Models.User.{id}` (Laravel's default user channel) if you use progress events.
+7. The job runs without a request or a user, so the filter's resource must not depend on either to render a row.
 
 ## Request
+The list's own parameters plus two export parts, at the top level:
 ```json
-{ "exportable": "sale.sale",
-  "data": { "filter": {}, "sort": "-document_date", "search": "abc" },
-  "file": { "format": "xlsx", "columns": ["number", "total_sum"],
-            "include_children": true, "child_columns": ["quantity", "price"], "title": "Sales" } }
+{ "format": "excel",
+  "columns": { "prefix-index": "Document Number", "outlet.name": "Outlet Name",
+               "products": { "sequence": "Sequence", "product.name": "Product", "quantity": "Quantity" } },
+  "filter": {}, "sort": "-document_date", "search": "abc" }
 ```
-`data` is passed **whole** to the filter (`filter(array $parameters)`), which validates it. The host must strip what a client may never send (e.g. a POS auth id).
+- `format`: `csv` or `excel` (a `.xlsx` file).
+- `columns`: resource key (dotted for nested objects) => heading. One entry may hold an object: the name of a HasMany relation => its own key => heading map; that relation's rows are written one per line next to the document's columns (a document without children gets one line with blank child cells). At most 200 columns, headings 1 to 150 characters. The file name is derived from the filter class (`SaleFilter` => `sale_<timestamp>.xlsx`).
 
-Errors raised by the service: `ValidationException` (filter / row cap), `ExportException` `forbidden` (unknown key or no permission, 403) and `too_many_active` (429).
+Errors raised on the request: `ValidationException` (422) for the export rules, the filter's parameters, an unknown column (`columns`), an empty result and the row cap (`format`); `ExportException` `too_many_active` (429).
 
 ## Config (all required)
 | Key | Meaning |
@@ -101,4 +81,4 @@ Measured earlier (2 child lines per document, Postgres 16): csv 500k rows in 54s
 composer check      # pint --test, phpstan (level 5), phpunit
 vendor/bin/pint     # fix style
 ```
-The tests configure the owner middleware and bind the file store themselves (`tests/Fixtures`), exactly as a host would.
+The tests bind the file store and a fixture filter themselves (`tests/Fixtures`), exactly as a host would.

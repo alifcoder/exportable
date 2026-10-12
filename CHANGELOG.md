@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+The export is requested through the filter and settled before the job exists. The job reads a prepared query; it needs no signed-in user.
+
+Breaking:
+
+- New `Concerns\HandlesExport` trait (moved from the host) and `Contracts\ExportSource`. Request: top-level `format` (`csv` | `excel`) and `columns` (`key => heading`, one nested object = a HasMany relation's columns). `title`, `include_children`, `child_columns` and the `export` wrapper are gone; the file name comes from the filter class.
+- `ExportFormat::XLSX` (`xlsx`) is `ExportFormat::EXCEL` (`excel`, still a `.xlsx` file); the `max_rows.xlsx` config key is unchanged.
+- Removed `Exportable`, `ExportRegistry`, `ResourceExportable`, `ExportPlan`, `Column` and `ExportServiceInterface::definition()`. Columns are checked against the resource's output for a sample of rows on the request, which also sets their types.
+- `ExportServiceInterface::create()` takes an `ExportRequest` (source, format, the applied query, columns). `ExportCreateDTO` carries the compiled SQL, bindings and window (`PreparedQuery`) and typed `ExportColumn`s.
+- The job pages the prepared SQL by `limit/offset` in `chunk_size` rows (it used to snapshot the keys and reload them with the rebuilt filter). The `queue.middleware` config key and `RunExport::middleware()` are removed: the job needs no signed-in user, so there is nothing to wrap.
+- `ExportException::unknownExportable()` and `unknownColumn()` are gone; an empty result and an unknown column are 422 validation errors on `columns`.
+
 ## 0.5.0
 
 Cell types: `Enums\ColumnType` (`String`, `Number`, `Integer`, `Decimal`, `Percent`, `Currency`, `Boolean`, `Date`, `DateTime`, `Time`), `Column::as()`, and a `types` map on `ResourceExportable`. A column without a type reads each value; `ResourceExportable` recognises dates, booleans and numbers from the resource output. xlsx writes real Excel dates; boolean text, percent, currency, time and date formats are configurable.

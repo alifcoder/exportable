@@ -9,23 +9,26 @@ use Alif\Export\Helpers\ExportConfig;
 enum ExportFormat: string
 {
     case CSV = 'csv';
-    case XLSX = 'xlsx';
+    case EXCEL = 'excel';
 
     public function extension(): string
     {
-        return $this->value;
+        return match ($this) {
+            self::CSV => 'csv',
+            self::EXCEL => 'xlsx',
+        };
     }
 
     public function maxRows(): int
     {
-        return ExportConfig::int("max_rows.{$this->value}");
+        return ExportConfig::int("max_rows.{$this->extension()}");
     }
 
     public function mimeType(): string
     {
         return match ($this) {
             self::CSV => 'text/csv',
-            self::XLSX => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            self::EXCEL => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         };
     }
 }

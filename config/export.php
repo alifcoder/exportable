@@ -27,9 +27,6 @@ return [
         'name' => 'exports',
         // Worker retry_after must exceed this value (seconds).
         'timeout' => 1800,
-        // Job middleware classes (resolved from the container) wrapping every export job. The host signs the
-        // owner in here and re-checks the permission; throw an ExportException to fail the export.
-        'middleware' => [],
     ],
 
     // An active-export slot that is never released (worker killed) expires queue.timeout + this margin

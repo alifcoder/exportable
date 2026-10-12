@@ -4,21 +4,20 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services\Actions\Export;
 
+use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportBuilder;
-use Alif\Export\Helpers\ExportPlan;
+use Alif\Export\Helpers\ExportFileName;
 use Alif\Export\Helpers\ExportProgress;
-use Alif\Export\Helpers\ExportRegistry;
 use Alif\Export\Helpers\ExportWriter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 
-/** Writes the file of a task. Who the job runs as, and whether they may still export, is the host's job middleware. */
+/** Writes the file of a task from its prepared query. It needs no signed-in user: the access limits are already in the SQL. */
 final readonly class WriteExport
 {
     public function __construct(
-        private ExportRegistry $registry,
         private ExportBuilder $builder,
         private ExportWriter $writer,
         private ExportProgress $progress,
@@ -45,18 +44,17 @@ final readonly class WriteExport
     private function write(ExportTask $task, string $path): int
     {
         $dto = $task->request;
-        $exportable = $this->registry->get($dto->exportable);
-        $plan = ExportPlan::for($exportable, $dto, lenient: true);
+        $columns = [...$dto->columns, ...$dto->childColumns];
         $previous = Model::preventsLazyLoading();
         Model::preventLazyLoading();
 
         try {
             return $this->writer->store(
                 $dto->format,
-                $dto->title ?? (string) __($exportable->title()),
-                $plan->headings(),
-                $plan->types(),
-                $this->progress->track($task, $this->builder->rows($plan, $this->builder->query($plan))),
+                ExportFileName::name($dto->source),
+                array_map(fn (ExportColumn $column): string => $column->label, $columns),
+                array_map(fn (ExportColumn $column) => $column->type, $columns),
+                $this->progress->track($task, $this->builder->rows($dto)),
                 $path,
             );
         } finally {

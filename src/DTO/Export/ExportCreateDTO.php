@@ -4,36 +4,36 @@ declare(strict_types=1);
 
 namespace Alif\Export\DTO\Export;
 
+use Alif\Export\Contracts\ExportSource;
 use Alif\Export\Enums\ExportFormat;
 
+/** What the job writes, fully resolved on the request: the source class, format, typed columns and the prepared query. */
 final readonly class ExportCreateDTO
 {
     /**
-     * @param  list<string>  $columns
-     * @param  list<string>  $childColumns
-     * @param  array<string, mixed>  $parameters
+     * @param  class-string<ExportSource>  $source
+     * @param  list<ExportColumn>  $columns
+     * @param  list<ExportColumn>  $childColumns  Empty without a child relation.
      */
     public function __construct(
-        public string $exportable,
+        public string $source,
         public ExportFormat $format,
         public array $columns,
-        public bool $includeChildren,
+        public ?string $childRelation,
         public array $childColumns,
-        public ?string $title,
-        public array $parameters,
+        public PreparedQuery $query,
     ) {}
 
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
         return new self(
-            exportable: $data['exportable'],
+            source: $data['source'],
             format: ExportFormat::from($data['format']),
-            columns: array_values($data['columns']),
-            includeChildren: (bool) $data['include_children'],
-            childColumns: array_values($data['child_columns'] ?? []),
-            title: $data['title'] ?? null,
-            parameters: $data['parameters'] ?? [],
+            columns: array_map(ExportColumn::fromArray(...), $data['columns']),
+            childRelation: $data['child_relation'],
+            childColumns: array_map(ExportColumn::fromArray(...), $data['child_columns']),
+            query: PreparedQuery::fromArray($data['query']),
         );
     }
 
@@ -41,13 +41,12 @@ final readonly class ExportCreateDTO
     public function toArray(): array
     {
         return [
-            'exportable' => $this->exportable,
+            'source' => $this->source,
             'format' => $this->format->value,
-            'columns' => $this->columns,
-            'include_children' => $this->includeChildren,
-            'child_columns' => $this->childColumns,
-            'title' => $this->title,
-            'parameters' => $this->parameters,
+            'columns' => array_map(fn (ExportColumn $c): array => $c->toArray(), $this->columns),
+            'child_relation' => $this->childRelation,
+            'child_columns' => array_map(fn (ExportColumn $c): array => $c->toArray(), $this->childColumns),
+            'query' => $this->query->toArray(),
         ];
     }
 }

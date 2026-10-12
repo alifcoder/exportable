@@ -19,7 +19,7 @@ final class XlsxPrecisionTest extends TestCase
         Storage::fake('local');
 
         app(ExportWriter::class)->store(
-            ExportFormat::XLSX,
+            ExportFormat::EXCEL,
             't',
             ['id', 'qty'],
             [null, ColumnType::Number],

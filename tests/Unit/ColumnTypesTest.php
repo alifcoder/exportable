@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Alif\Export\Tests\Unit;
 
 use Alif\Export\Enums\ColumnType;
-use Alif\Export\Helpers\Column;
 use Alif\Export\Helpers\Writers\CsvWriter;
 use Alif\Export\Helpers\Writers\XlsxWriter;
 use Alif\Export\Tests\TestCaseWithoutDatabase;
@@ -118,15 +117,5 @@ final class ColumnTypesTest extends TestCaseWithoutDatabase
         );
 
         $this->assertSame('04.03.2026,"2026-03-04 05:06:07",05:06,Yo\'q,25.50,1500.000', $row);
-    }
-
-    public function test_column_api_sets_the_type(): void
-    {
-        $this->assertNull(Column::make('x')->type());
-        $this->assertSame(ColumnType::Percent, Column::make('x')->as(ColumnType::Percent)->type());
-        $this->assertSame(ColumnType::Date, Column::make('x')->date()->type());
-        $this->assertSame(ColumnType::Number, Column::make('x')->numeric()->type());
-        $this->assertTrue(Column::make('x')->as(ColumnType::Currency)->isNumeric());
-        $this->assertFalse(Column::make('x')->as(ColumnType::Boolean)->isNumeric());
     }
 }

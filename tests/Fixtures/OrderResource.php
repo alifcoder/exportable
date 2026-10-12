@@ -14,7 +14,9 @@ final class OrderResource extends JsonResource
         return [
             'id' => $this->id,
             'number' => $this->number,
+            'prefix-index' => 'PX-'.$this->number,
             'total' => $this->total,
+            'created_at' => $this->created_at,
             'owner' => $this->owner === null ? null : ['name' => $this->owner],
             'tags' => ['a', 'b'],
             'lines' => OrderLineResource::collection($this->lines),
