@@ -15,6 +15,7 @@ Breaking:
 
 - `HandlesExport::exportWindow()` hook is removed: the export always writes the whole filtered set, in one sheet. A limit/offset left on the list query is dropped, `PreparedQuery` loses `offset` and `limit` (queued payloads still carrying them are read fine).
 - `ExportRequest` is renamed `ExportDTO`.
+- No limit on the number of columns: the `max:200` rule and `too_many_columns` message are gone.
 - The package ships its messages (`lang/{uz,ru,en}/messages.php`, `export::messages.*`): the request's 422 messages and a text per error code. Publish with the `export-lang` tag to override.
 - A requested column must be offered by the filter, otherwise 422 on `columns` (`Column "x" is not offered by the filter.`) before any query runs: a document column is one of its `fields()` names; a list column is one of the `fields()` names of the item filter named by the optional `exportLists()` hook (`list => ItemFilter::class`, or `list => [ItemFilter::class, 'inner' => InnerFilter::class]`; no list by default). The resource check still follows.
 - The filter provides `query()` (abstract in `HandlesExport`) and the export starts from it; the `exportQuery()` hook is removed.

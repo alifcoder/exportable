@@ -7,7 +7,6 @@ return [
     'too_many_rows' => ':format eksporti uchun qatorlar juda ko\'p (ko\'pi bilan :max).',
     'unknown_column' => 'Noma\'lum ustun: ":column".',
     'column_not_offered' => '":column" ustuni filterda mavjud emas.',
-    'too_many_columns' => 'Ko\'pi bilan :max ta ustunni eksport qilish mumkin.',
     'needs_document_column' => 'Kamida bitta ustun hujjatning o\'zidan bo\'lishi kerak, ro\'yxatdan emas.',
     'nested_too_deep' => 'Ro\'yxatlar ko\'pi bilan :max darajagacha ichma-ich bo\'lishi mumkin.',
     'errors' => [

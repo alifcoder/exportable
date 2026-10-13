@@ -30,7 +30,7 @@ The list's own parameters plus two export parts, at the top level:
   "filter": {}, "sort": "-document_date", "search": "abc" }
 ```
 - `format`: `csv` or `excel` (a `.xlsx` file).
-- `columns`: resource key (dotted for nested objects) => heading. A list the resource renders (`products`) takes its own `key => heading` map, the keys read from each item; it may hold further lists (`serials`), up to 5 levels, and any number of sibling lists. At most 200 columns, headings 1 to 150 characters. The stored file is named `<task id>.<ext>`; the client chooses the download name.
+- `columns`: resource key (dotted for nested objects) => heading. A list the resource renders (`products`) takes its own `key => heading` map, the keys read from each item; it may hold further lists (`serials`), up to 5 levels, and any number of sibling lists.  The stored file is named `<task id>.<ext>`; the client chooses the download name.
 
 Errors raised on the request: `ValidationException` (422) for the export rules, the filter's parameters, an unknown column (`columns`), an empty result and the row cap (`format`); `ExportException` `too_many_active` (429).
 
@@ -66,7 +66,7 @@ A cell is written as its column's type, read from the values the resource yields
 Dates arriving as text are parsed and shown in the `app.timezone`. A value that does not fit its type (text in a number column, a number over 15 digits, an unparsable date) is written as exact text, never rounded or dropped.
 
 ## Messages
-The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `column_not_offered`, `too_many_columns`, `needs_document_column`, `nested_too_deep`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
+The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `column_not_offered`, `needs_document_column`, `nested_too_deep`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.

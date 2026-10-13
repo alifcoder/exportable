@@ -20,8 +20,6 @@ use Illuminate\Validation\ValidationException;
 
 trait HandlesExport
 {
-    private const int MAX_COLUMNS = 200;
-
     /** Lists inside lists, counted from the document. */
     private const int MAX_DEPTH = 5;
 
@@ -91,7 +89,7 @@ trait HandlesExport
     {
         return [
             'format' => ['required', Rule::enum(ExportFormatEnum::class)],
-            'columns' => ['required', 'array', 'min:1', 'max:'.self::MAX_COLUMNS],
+            'columns' => ['required', 'array', 'min:1'],
         ];
     }
 
@@ -107,10 +105,6 @@ trait HandlesExport
     private function exportColumns(array $columns): array
     {
         $list = $this->flattenColumns($columns, []);
-
-        if (count($list) > self::MAX_COLUMNS) {
-            throw ValidationException::withMessages(['columns' => [__('export::messages.too_many_columns', ['max' => self::MAX_COLUMNS])]]);
-        }
 
         if (array_filter($list, fn (ExportColumn $c): bool => $c->groups === []) === []) {
             throw ValidationException::withMessages(['columns' => [__('export::messages.needs_document_column')]]);
