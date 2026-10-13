@@ -16,11 +16,13 @@ use Illuminate\Support\ServiceProvider;
  */
 final class ExportServiceProvider extends ServiceProvider
 {
+    /** Binds the export service interface to its implementation. */
     public function register(): void
     {
         $this->app->bind(ExportServiceInterface::class, ExportService::class);
     }
 
+    /** Lets the host publish the config stub with `export-config`. */
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {

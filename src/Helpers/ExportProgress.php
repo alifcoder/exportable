@@ -17,6 +17,8 @@ use Throwable;
 final class ExportProgress
 {
     /**
+     * Passes every row through unchanged and sends a progress event each time another step is reached.
+     *
      * @template TRow
      *
      * @param  iterable<int, TRow>  $rows
@@ -52,6 +54,7 @@ final class ExportProgress
         }
     }
 
+    /** Sends the progress event. If sending fails, the error is only reported and the export goes on. */
     private function send(ExportTask $task, int $percent, int $rows, int $total): void
     {
         try {

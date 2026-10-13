@@ -7,6 +7,7 @@ namespace Alif\Export\DTO\Export;
 use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Builder;
 
+/** The list query saved as SQL text and bindings, so the job can run it later without the request. */
 final readonly class PreparedQuery
 {
     /** The only driver supported: the job appends a `limit n offset m` tail to {@see $sql}. */
@@ -21,7 +22,11 @@ final readonly class PreparedQuery
         public ?int $limit,
     ) {}
 
-    /** @param Builder<*> $builder The applied, ordered list query. */
+    /**
+     * Turns an Eloquent query into SQL and bindings. The limit and offset are taken out and kept apart, so the job can read page by page.
+     *
+     * @param Builder<*> $builder The applied, ordered list query.
+     */
     public static function from(Builder $builder): self
     {
         $connection = $builder->getModel()->getConnection();
@@ -39,13 +44,21 @@ final readonly class PreparedQuery
         return new self($builder->getModel()->getConnectionName(), $base->toSql(), $base->getBindings(), $offset, $limit);
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * Builds the query back from the array saved in the job payload.
+     *
+     * @param  array<string, mixed>  $data
+     */
     public static function fromArray(array $data): self
     {
         return new self($data['connection'], $data['sql'], $data['bindings'], $data['offset'], $data['limit']);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Turns the query into a plain array for the job payload.
+     *
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return ['connection' => $this->connection, 'sql' => $this->sql, 'bindings' => $this->bindings, 'offset' => $this->offset, 'limit' => $this->limit];

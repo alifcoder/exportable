@@ -13,7 +13,11 @@ final readonly class ExportTask
         public ?int $totalRows,
     ) {}
 
-    /** @param array<string, mixed> $data */
+    /**
+     * Builds the task back from the array saved in the job payload.
+     *
+     * @param  array<string, mixed>  $data
+     */
     public static function fromArray(array $data): self
     {
         return new self(
@@ -23,7 +27,11 @@ final readonly class ExportTask
         );
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Turns the task into a plain array for the job payload.
+     *
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return [

@@ -22,18 +22,27 @@ final readonly class ExportColumn
         public array $groups = [],
     ) {}
 
+    /** Returns a copy of this column with another type. */
     public function withType(?ColumnType $type): self
     {
         return new self($this->key, $this->label, $type, $this->groups);
     }
 
-    /** @param array{key: string, label: string, type?: string|null, groups?: list<string>} $data */
+    /**
+     * Builds the column back from the array saved in the job payload.
+     *
+     * @param  array{key: string, label: string, type?: string|null, groups?: list<string>}  $data
+     */
     public static function fromArray(array $data): self
     {
         return new self($data['key'], $data['label'], isset($data['type']) ? ColumnType::from($data['type']) : null, $data['groups'] ?? []);
     }
 
-    /** @return array{key: string, label: string, type: string|null, groups: list<string>} */
+    /**
+     * Turns the column into a plain array for the job payload.
+     *
+     * @return array{key: string, label: string, type: string|null, groups: list<string>}
+     */
     public function toArray(): array
     {
         return ['key' => $this->key, 'label' => $this->label, 'type' => $this->type?->value, 'groups' => $this->groups];

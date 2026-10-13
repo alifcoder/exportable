@@ -36,6 +36,8 @@ final class ExportBuilder
     }
 
     /**
+     * Stops the export when there is no data.
+     *
      * @param  int|null  $rows  The output row count when the caller already has it ({@see countRows()}).
      *
      * @throws ValidationException When the filter selects nothing: an empty file is never produced.
@@ -50,6 +52,8 @@ final class ExportBuilder
     }
 
     /**
+     * Stops the export when it has more rows than the format allows.
+     *
      * @param  int|null  $rows  The row count when the caller already has it ({@see countRows()}); the cap is then
      *                          compared to it instead of being queried again.
      *
@@ -151,6 +155,8 @@ final class ExportBuilder
     }
 
     /**
+     * Checks that every requested column exists and gives each one its type.
+     *
      * @param  list<ExportColumn>  $requested
      * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
      * @return list<ExportColumn>
@@ -234,6 +240,8 @@ final class ExportBuilder
     }
 
     /**
+     * Turns one document into lines: its own line, then a heading line and the item lines of each list.
+     *
      * @param  array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}  $read
      * @return list<Line>
      */
@@ -262,6 +270,7 @@ final class ExportBuilder
         return $lines;
     }
 
+    /** Turns a value into a simple cell value. An enum becomes its value, an array or object is an error. */
     private function normalize(mixed $value, string $key): string|int|float|bool|null
     {
         return match (true) {

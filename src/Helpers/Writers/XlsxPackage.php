@@ -20,6 +20,8 @@ final class XlsxPackage
     private const int CHUNK = 1048576;
 
     /**
+     * Opens the finished xlsx file, cleans it up and saves it again.
+     *
      * @param  string  $depths  One byte per written row, row 1 first: the depth of that row.
      * @param  array<int, float>  $widths  Width in characters per column, column 1 first.
      */
@@ -49,7 +51,7 @@ final class XlsxPackage
         }
     }
 
-    /** The library writes an empty comments part and its drawing into every file; nothing refers to them but the sheet's own relations. */
+    /** Removes the empty comments files the library adds to every xlsx, because some editors cannot open them. */
     private function dropComments(ZipArchive $zip): void
     {
         foreach (['xl/comments1.xml', 'xl/drawings/vmlDrawing1.vml', 'xl/worksheets/_rels/sheet1.xml.rels'] as $part) {
@@ -64,7 +66,11 @@ final class XlsxPackage
         }
     }
 
-    /** @param array<int, float> $widths */
+    /**
+     * Reads the sheet XML piece by piece, changes it, and writes it to a temporary file (so a big sheet never sits in memory).
+     *
+     * @param  array<int, float>  $widths
+     */
     private function rewrite(ZipArchive $zip, string $depths, int $max, array $widths, string $to): void
     {
         $from = $zip->getStream(self::SHEET);
@@ -108,15 +114,15 @@ final class XlsxPackage
         }
     }
 
-    /** The reference to the dropped comments drawing sits after the rows, so it is in the last piece. */
+    /** Removes the link to the deleted comments drawing, so the sheet does not point at a file that is gone. */
     private function withoutDrawing(string $tail): string
     {
         return (string) preg_replace('/<legacyDrawing\b[^>]*\/>/', '', $tail);
     }
 
     /**
-     * The column widths go in before the rows. With grouping, the outline's summary rows sit above their items and the
-     * sheet declares how deep the outline goes.
+     * Changes the top part of the sheet: sets the column widths and, when rows are grouped, puts the "+" button on the
+     * parent row (above its items) and tells Excel how deep the groups go.
      *
      * @param  array<int, float>  $widths
      */
@@ -151,6 +157,7 @@ final class XlsxPackage
         return (string) preg_replace('/(<cols>|<sheetData)/', '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="'.$max.'"/>$1', $xml, 1);
     }
 
+    /** Marks each row with its group level: sub rows start hidden, and a row that has sub rows starts collapsed. */
     private function rows(string $xml, string $depths): string
     {
         return (string) preg_replace_callback('/<row r="(\d+)"/', function (array $m) use ($depths): string {

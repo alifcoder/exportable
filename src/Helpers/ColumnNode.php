@@ -23,7 +23,11 @@ final class ColumnNode
         public array $children = [],
     ) {}
 
-    /** @param list<ExportColumn> $columns */
+    /**
+     * Builds the tree from the flat column list: a column goes under the list it belongs to.
+     *
+     * @param  list<ExportColumn>  $columns
+     */
     public static function tree(array $columns): self
     {
         $root = new self(0);
@@ -41,13 +45,21 @@ final class ColumnNode
         return $root;
     }
 
-    /** @return list<string> */
+    /**
+     * The labels of this level's columns.
+     *
+     * @return list<string>
+     */
     public function headings(): array
     {
         return array_map(fn (ExportColumn $column): string => $column->label, $this->columns);
     }
 
-    /** @return list<ColumnType|null> */
+    /**
+     * The types of this level's columns.
+     *
+     * @return list<ColumnType|null>
+     */
     public function types(): array
     {
         return array_map(fn (ExportColumn $column) => $column->type, $this->columns);
@@ -66,7 +78,11 @@ final class ColumnNode
         return $widths;
     }
 
-    /** @param array<int, int> $widths */
+    /**
+     * Adds the longest label of every column, in this level and in all the levels below.
+     *
+     * @param  array<int, int>  $widths
+     */
     private function collect(array &$widths): void
     {
         foreach ($this->columns as $i => $column) {

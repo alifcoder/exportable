@@ -23,6 +23,7 @@ enum ColumnType: string
     case DateTime = 'datetime';
     case Time = 'time';
 
+    /** True for the types that are written as numbers. */
     public function isNumeric(): bool
     {
         return match ($this) {
@@ -31,6 +32,7 @@ enum ColumnType: string
         };
     }
 
+    /** True for the types that are written as dates or times. */
     public function isTemporal(): bool
     {
         return in_array($this, [self::Date, self::DateTime, self::Time], true);

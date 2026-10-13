@@ -57,6 +57,8 @@ final class ResourceRows
     }
 
     /**
+     * Adds one row's keys and values to the layout. A value that is already set is kept.
+     *
      * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
      * @param  array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}  $read
      * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
@@ -77,6 +79,8 @@ final class ResourceRows
     }
 
     /**
+     * Removes the shadowed keys from the layout, in the lists too.
+     *
      * @param  array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}  $layout
      * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
      */
@@ -122,6 +126,8 @@ final class ResourceRows
     }
 
     /**
+     * Splits a resource's output into plain values and lists.
+     *
      * @param  array<string, mixed>  $payload
      * @return array{values: array<string, scalar|null>, lists: array<string, list<array<string, mixed>>>}
      */
@@ -165,6 +171,8 @@ final class ResourceRows
     }
 
     /**
+     * Adds the new keys. For a key that exists, the first value that is not null stays.
+     *
      * @param  array<string, scalar|null>  $into
      * @param  array<string, scalar|null>  $from
      * @return array<string, scalar|null>

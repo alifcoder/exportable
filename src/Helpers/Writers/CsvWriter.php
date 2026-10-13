@@ -9,12 +9,14 @@ use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
 use Carbon\CarbonInterface;
 
+/** Writes the export as a csv file, line by line. */
 final class CsvWriter implements Writer
 {
     private const array FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r"];
 
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
+    /** Writes the headings, then every line, to the csv file and returns how many lines were written. */
     public function write(array $headings, array $types, iterable $lines, string $path, array $widths = []): int
     {
         $file = @fopen($path, 'wb');
@@ -76,6 +78,7 @@ final class CsvWriter implements Writer
         return $out;
     }
 
+    /** Puts a `'` before text that starts like a formula, so a spreadsheet does not run it. */
     private function neutralised(string $text): string
     {
         return $text !== '' && in_array($text[0], self::FORMULA_PREFIXES, true) ? "'".$text : $text;

@@ -27,6 +27,7 @@ final class XlsxWriter implements Writer
 {
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
+    /** Writes the headings and all lines to the xlsx file, then lets `XlsxPackage` finish it. */
     public function write(array $headings, array $types, iterable $lines, string $path, array $widths = []): int
     {
         $options = new Options;
@@ -66,11 +67,13 @@ final class XlsxWriter implements Writer
         return $count;
     }
 
+    /** The default style of a cell: the configured font, centered. */
     private function baseStyle(): Style
     {
         return $this->centered((new Style)->setFontName($this->style->fontName())->setFontSize($this->style->fontSize()));
     }
 
+    /** Centers the cell, both across and up and down. */
     private function centered(Style $style): Style
     {
         return $style->setCellAlignment(CellAlignment::CENTER)->setCellVerticalAlignment(CellVerticalAlignment::CENTER);
@@ -91,6 +94,8 @@ final class XlsxWriter implements Writer
     }
 
     /**
+     * Makes the cells of a heading line (the labels of a list) and remembers their widths.
+     *
      * @param  array<int, int>  $longest
      * @return list<StringCell>
      */
@@ -108,6 +113,7 @@ final class XlsxWriter implements Writer
         return $cells;
     }
 
+    /** The style of the header row: font, size, color, background and bold from the config. */
     private function headerStyle(): Style
     {
         $style = $this->centered((new Style)

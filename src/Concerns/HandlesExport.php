@@ -24,9 +24,14 @@ trait HandlesExport
     /** Lists inside lists, counted from the document. */
     private const int MAX_DEPTH = 5;
 
-    /** @return array<string, mixed> The parameters the filter was built from. */
+    /**
+     * Returns the input the filter was built from (the request data).
+     *
+     * @return array<string, mixed> The parameters the filter was built from.
+     */
     abstract protected function params(): array;
 
+    /** Adds the filter's conditions to the query. */
     abstract public function apply(Builder $builder): void;
 
     /** Queues the export and returns its task; the file is announced later by the `ExportFinished` event. */
@@ -115,6 +120,8 @@ trait HandlesExport
     }
 
     /**
+     * Turns the nested columns array into one flat list. Each column remembers which list it belongs to.
+     *
      * @param  array<string, mixed>  $columns
      * @param  list<string>  $groups
      * @return list<ExportColumn>

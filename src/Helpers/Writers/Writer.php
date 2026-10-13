@@ -9,6 +9,8 @@ use Alif\Export\Enums\ColumnType;
 interface Writer
 {
     /**
+     * Creates the file and writes the headings and all lines to it.
+     *
      * @param  list<string>  $headings  The document columns.
      * @param  list<ColumnType|null>  $types  Declared type per document column; null reads the type of each value.
      * @param  iterable<int, Line>  $lines  Document lines in order, each followed by its sub lines (see {@see Line}).

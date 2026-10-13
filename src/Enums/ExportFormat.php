@@ -9,11 +9,13 @@ use Alif\Export\Helpers\Writers\CsvWriter;
 use Alif\Export\Helpers\Writers\Writer;
 use Alif\Export\Helpers\Writers\XlsxWriter;
 
+/** The file formats an export can be written in. */
 enum ExportFormat: string
 {
     case CSV = 'csv';
     case EXCEL = 'excel';
 
+    /** The file extension of this format. */
     public function extension(): string
     {
         return match ($this) {
@@ -22,11 +24,13 @@ enum ExportFormat: string
         };
     }
 
+    /** The most rows this format may have, from the config. */
     public function maxRows(): int
     {
         return ExportConfig::int("max_rows.{$this->extension()}");
     }
 
+    /** The MIME type of this format. */
     public function mimeType(): string
     {
         return match ($this) {
@@ -35,6 +39,7 @@ enum ExportFormat: string
         };
     }
 
+    /** The writer class that creates the file of this format. */
     public function writer(): Writer
     {
         return match ($this) {

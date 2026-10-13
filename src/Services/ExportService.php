@@ -14,6 +14,7 @@ use Alif\Export\Jobs\RunExport;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
 use Illuminate\Support\Str;
 
+/** Creates an export: checks the request and queues the job. */
 final readonly class ExportService implements ExportServiceInterface
 {
     public function __construct(private ExportBuilder $builder) {}

@@ -17,6 +17,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 interface ExportSource
 {
-    /** @return array{model: class-string<Model>, resource: class-string<JsonResource>, with: array<int|string, string|Closure>} */
+    /**
+     * Tells the job which model, resource and relations to use when it reads the rows.
+     *
+     * @return array{model: class-string<Model>, resource: class-string<JsonResource>, with: array<int|string, string|Closure>}
+     */
     public static function exportSource(): array;
 }

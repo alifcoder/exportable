@@ -22,6 +22,8 @@ final readonly class WriteExport
     ) {}
 
     /**
+     * Writes the export file and returns how many rows were written. Lazy loading is blocked while it runs, to catch N+1 queries.
+     *
      * @param  string  $path  Local file to write.
      * @return int Rows written.
      *

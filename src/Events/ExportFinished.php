@@ -20,6 +20,7 @@ final class ExportFinished
         public readonly ?string $errorCode,
     ) {}
 
+    /** True when the export was written without an error. */
     public function succeeded(): bool
     {
         return $this->errorCode === null;

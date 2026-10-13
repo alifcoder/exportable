@@ -7,11 +7,13 @@ namespace Alif\Export\Helpers;
 /** Typed reader of the host's `export.style` settings: date formats, csv layout, fonts, header look, number formats, widths. */
 final readonly class ExportStyle
 {
+    /** PHP `date()` format of date values in csv and text. */
     public function dateFormat(): string
     {
         return ExportConfig::string('style.date_format');
     }
 
+    /** PHP `date()` format of date-time values in csv and text. */
     public function dateTimeFormat(): string
     {
         return ExportConfig::string('style.datetime_format');
@@ -53,21 +55,25 @@ final readonly class ExportStyle
         return ExportConfig::bool('style.csv.bom');
     }
 
+    /** Font name of all xlsx cells. */
     public function fontName(): string
     {
         return ExportConfig::string('style.xlsx.font.name');
     }
 
+    /** Font size of the xlsx cells. */
     public function fontSize(): int
     {
         return ExportConfig::int('style.xlsx.font.size');
     }
 
+    /** Whether the xlsx header is bold. */
     public function headerBold(): bool
     {
         return ExportConfig::bool('style.xlsx.header.bold');
     }
 
+    /** Font size of the xlsx header. */
     public function headerFontSize(): int
     {
         return ExportConfig::int('style.xlsx.header.font_size');
@@ -127,11 +133,13 @@ final readonly class ExportStyle
         return ExportConfig::string('style.xlsx.time_format');
     }
 
+    /** The narrowest an xlsx column can be, in characters. */
     public function minColumnWidth(): float
     {
         return (float) ExportConfig::get('style.xlsx.column_width.min');
     }
 
+    /** The widest an xlsx column can be, in characters. */
     public function maxColumnWidth(): float
     {
         return (float) ExportConfig::get('style.xlsx.column_width.max');

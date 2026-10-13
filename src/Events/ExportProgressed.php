@@ -25,17 +25,23 @@ final class ExportProgressed implements ShouldBroadcastNow
         public readonly int $totalRows,
     ) {}
 
+    /** The private channel this event is sent to. */
     public function broadcastOn(): PrivateChannel
     {
         return new PrivateChannel('export.'.$this->exportId);
     }
 
+    /** The event name the client listens for. */
     public function broadcastAs(): string
     {
         return 'export.progressed';
     }
 
-    /** @return array{id: string, percent: int, rows: int, total_rows: int} */
+    /**
+     * The data sent to the client.
+     *
+     * @return array{id: string, percent: int, rows: int, total_rows: int}
+     */
     public function broadcastWith(): array
     {
         return ['id' => $this->exportId, 'percent' => $this->percent, 'rows' => $this->rows, 'total_rows' => $this->totalRows];

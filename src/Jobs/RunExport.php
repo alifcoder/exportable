@@ -17,6 +17,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
+/** The queued job that writes the export file, stores it and tells the host with `ExportFinished`. */
 final class RunExport implements ShouldQueue
 {
     use Dispatchable;
@@ -38,6 +39,7 @@ final class RunExport implements ShouldQueue
         $this->onQueue(ExportConfig::nullable('queue.name'));
     }
 
+    /** Writes the file to a temporary path, gives it to the file store, and removes it. A failure is announced, not thrown. */
     public function handle(WriteExport $write, ExportFileStore $store): void
     {
         $task = ExportTask::fromArray($this->task);
@@ -66,6 +68,7 @@ final class RunExport implements ShouldQueue
         $this->announce($this->failure(ExportTask::fromArray($this->task), $e));
     }
 
+    /** Turns an error into a failed `ExportFinished` event. Unexpected errors are also reported. */
     private function failure(ExportTask $task, Throwable $e): ExportFinished
     {
         if (! $e instanceof ExportException || in_array($e->errorCode, self::REPORTED_CODES, true)) {
