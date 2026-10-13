@@ -12,7 +12,6 @@ use Alif\Export\Helpers\ExportBuilder;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Jobs\RunExport;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
 
 final readonly class ExportService implements ExportServiceInterface
@@ -38,7 +37,7 @@ final readonly class ExportService implements ExportServiceInterface
             PreparedQuery::from($query),
         );
 
-        $task = new ExportTask((string) Str::uuid(), App::getLocale(), $dto, $rows);
+        $task = new ExportTask((string) Str::uuid(), $dto, $rows);
         RunExport::dispatch($task->toArray());
 
         return $task;

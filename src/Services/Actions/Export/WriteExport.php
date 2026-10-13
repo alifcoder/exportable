@@ -12,7 +12,6 @@ use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Helpers\Writers\Line;
 use Generator;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\App;
 
 /** Writes the file of a task from its prepared query. It needs no signed-in user: the access limits are already in the SQL. */
 final readonly class WriteExport
@@ -29,18 +28,6 @@ final readonly class WriteExport
      * @throws ExportException
      */
     public function __invoke(ExportTask $task, string $path): int
-    {
-        $previousLocale = App::getLocale();
-        App::setLocale($task->locale);
-
-        try {
-            return $this->write($task, $path);
-        } finally {
-            App::setLocale($previousLocale);
-        }
-    }
-
-    private function write(ExportTask $task, string $path): int
     {
         $dto = $task->request;
         $tree = ColumnNode::tree($dto->columns);

@@ -19,6 +19,7 @@ Breaking:
 - `ExportProgressed` broadcasts on the private channel `export.{id}` (was `App.Models.User.{ownerId}`) and has no `ownerId`.
 - `Writer::write()` takes no title; the xlsx sheet keeps the default name. `ExportFileName` is removed: the stored file is named `<task id>.<ext>` instead of after the filter class.
 - `ExportWriter` is replaced by `ExportFormat::writer()` and `StartExport` is folded into `ExportService`.
+- `ExportTask::$locale` is gone: exports are always written in the worker's default locale, `WriteExport` no longer switches it. Queued payloads still carrying `locale` are read fine (the key is ignored).
 
 ## 0.6.0
 
