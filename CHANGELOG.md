@@ -13,6 +13,7 @@ Changed:
 
 Breaking:
 
+- The filter provides `query()` (abstract in `HandlesExport`) and the export starts from it; the `exportQuery()` hook is removed.
 - `ExportBuilder::rows()` is `documents()` (one list of `Line`s per document); `ResourceRows::values()` is `read()` and `layout()` returns nested `values` and `lists`. `Writer::write()` takes `Line`s and the column widths. `ExportColumn::toArray()` carries `groups`.
 - `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns` (lists are now columns with a `group`), `ExportBuilder::assertChildRelation()` is removed.
 - The package no longer knows who asked: `HandlesExport::export()` and `ExportServiceInterface::create()` take no owner, `ExportTask::$ownerId` is gone. With it go the per-owner quota (`ExportQuota`, `max_active_per_user`, `ExportException::tooManyActive()`/`forbidden()`/`ownerMissing()`, `httpStatus()`/`report()`/`render()`). `stale_margin_seconds` now only sets how long the "finished" announcement is remembered.

@@ -31,6 +31,13 @@ trait HandlesExport
      */
     abstract protected function params(): array;
 
+    /**
+     * The list's base query before the filter's conditions (its own selects, counts and ordering); the export starts from it.
+     *
+     * @return Builder<Model>
+     */
+    abstract protected function query(): Builder;
+
     /** Adds the filter's conditions to the query. */
     abstract public function apply(Builder $builder): void;
 
@@ -40,7 +47,7 @@ trait HandlesExport
         $parameters = $this->params();
         Validator::make($parameters, $this->exportRules())->validate();
 
-        $query = $this->exportQuery();
+        $query = $this->query();
         $this->apply($query);
         $this->exportWindow($query);
 
@@ -66,17 +73,6 @@ trait HandlesExport
             // The instance default, so a filter that overrides getWith() (e.g. a mini list) is honoured.
             'with' => (new static([]))->getWith(),
         ];
-    }
-
-    /**
-     * The list's base query before the filter's conditions: override to start from the filter's own selects,
-     * counts and ordering instead of the bare model.
-     *
-     * @return Builder<Model>
-     */
-    protected function exportQuery(): Builder
-    {
-        return static::$model::query();
     }
 
     /** Override to limit the query to the page the list would show; by default the whole filtered set is exported. */
