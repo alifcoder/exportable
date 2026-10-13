@@ -6,7 +6,7 @@ namespace Alif\Export\Helpers;
 
 use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportCreateDTO;
-use Alif\Export\DTO\Export\ExportRequest;
+use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\Writers\Line;
@@ -72,7 +72,7 @@ final class ExportBuilder
         }
     }
 
-    /** Rows the export will write, within the list's own window (limit, page) when it has one. */
+    /** Rows the export will write: the whole filtered set. */
     public function countRows(Builder $query): int
     {
         $counted = (clone $query)->reorder()->setEagerLoads([])->select($query->getModel()->getQualifiedKeyName())->toBase();
@@ -88,7 +88,7 @@ final class ExportBuilder
      *
      * @throws ValidationException An unknown column.
      */
-    public function describe(ExportRequest $request, Builder $query): array
+    public function describe(ExportDTO $request, Builder $query): array
     {
         $source = $request->source::exportSource();
         $sample = (clone $query)->reorder()->orderBy($query->getModel()->getQualifiedKeyName());
@@ -117,13 +117,11 @@ final class ExportBuilder
         $chunk = max(1, ExportConfig::int('chunk_size'));
         $cap = $dto->format->maxRows();
         $tree = ColumnNode::tree($dto->columns);
-        $offset = $query->offset;
-        $remaining = $query->limit;
+        $offset = 0;
         $emitted = 0;
 
-        while ($remaining === null || $remaining > 0) {
-            $size = $remaining === null ? $chunk : min($chunk, $remaining);
-            $records = $connection->select(sprintf('%s limit %d offset %d', $query->sql, $size, $offset), $query->bindings);
+        while (true) {
+            $records = $connection->select(sprintf('%s limit %d offset %d', $query->sql, $chunk, $offset), $query->bindings);
 
             if ($records === []) {
                 return;
@@ -146,9 +144,8 @@ final class ExportBuilder
             }
 
             $offset += count($records);
-            $remaining = $remaining === null ? null : $remaining - count($records);
 
-            if (count($records) < $size) {
+            if (count($records) < $chunk) {
                 return;
             }
         }

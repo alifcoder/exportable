@@ -12,11 +12,11 @@ use Illuminate\Database\Eloquent\Builder;
  * A validated request to export, as the host hands it over: the list's applied query (not yet run) and the
  * requested columns. The service turns it into a queued {@see ExportCreateDTO}.
  */
-final readonly class ExportRequest
+final readonly class ExportDTO
 {
     /**
      * @param  class-string<ExportSource>  $source
-     * @param  Builder<*>  $query  Filtered, access-limited and windowed like the list; ordering is added by the package.
+     * @param  Builder<*>  $query  Filtered and access-limited like the list; ordering is added by the package.
      * @param  list<ExportColumn>  $columns
      */
     public function __construct(

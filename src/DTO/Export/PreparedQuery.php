@@ -18,12 +18,10 @@ final readonly class PreparedQuery
         public ?string $connection,
         public string $sql,
         public array $bindings,
-        public int $offset,
-        public ?int $limit,
     ) {}
 
     /**
-     * Turns an Eloquent query into SQL and bindings. The limit and offset are taken out and kept apart, so the job can read page by page.
+     * Turns an Eloquent query into SQL and bindings. The job appends its own `limit`/`offset` to read chunk by chunk.
      *
      * @param Builder<*> $builder The applied, ordered list query.
      */
@@ -36,12 +34,10 @@ final readonly class PreparedQuery
         }
 
         $base = $builder->toBase();
-        $offset = (int) ($base->offset ?? 0);
-        $limit = $base->limit === null ? null : (int) $base->limit;
         $base->limit = null;
         $base->offset = null;
 
-        return new self($builder->getModel()->getConnectionName(), $base->toSql(), $base->getBindings(), $offset, $limit);
+        return new self($builder->getModel()->getConnectionName(), $base->toSql(), $base->getBindings());
     }
 
     /**
@@ -51,7 +47,7 @@ final readonly class PreparedQuery
      */
     public static function fromArray(array $data): self
     {
-        return new self($data['connection'], $data['sql'], $data['bindings'], $data['offset'], $data['limit']);
+        return new self($data['connection'], $data['sql'], $data['bindings']);
     }
 
     /**
@@ -61,6 +57,6 @@ final readonly class PreparedQuery
      */
     public function toArray(): array
     {
-        return ['connection' => $this->connection, 'sql' => $this->sql, 'bindings' => $this->bindings, 'offset' => $this->offset, 'limit' => $this->limit];
+        return ['connection' => $this->connection, 'sql' => $this->sql, 'bindings' => $this->bindings];
     }
 }

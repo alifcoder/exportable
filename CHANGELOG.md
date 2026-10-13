@@ -13,6 +13,9 @@ Changed:
 
 Breaking:
 
+- `HandlesExport::exportWindow()` hook is removed: the export always writes the whole filtered set, in one sheet. A limit/offset left on the list query is dropped, `PreparedQuery` loses `offset` and `limit` (queued payloads still carrying them are read fine).
+- `ExportRequest` is renamed `ExportDTO`.
+- A document column must be one of the filter's `fields()` names, otherwise 422 on `columns` (`Column "x" is not a field of the filter.`) before any query runs; the items of a list are only checked against the resource, as before.
 - The filter provides `query()` (abstract in `HandlesExport`) and the export starts from it; the `exportQuery()` hook is removed.
 - `ExportBuilder::rows()` is `documents()` (one list of `Line`s per document); `ResourceRows::values()` is `read()` and `layout()` returns nested `values` and `lists`. `Writer::write()` takes `Line`s and the column widths. `ExportColumn::toArray()` carries `groups`.
 - `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns` (lists are now columns with a `group`), `ExportBuilder::assertChildRelation()` is removed.

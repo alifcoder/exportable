@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Concerns;
 
 use Alif\Export\DTO\Export\ExportColumn;
-use Alif\Export\DTO\Export\ExportRequest;
+use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Enums\ExportFormat;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
@@ -38,6 +38,13 @@ trait HandlesExport
      */
     abstract protected function query(): Builder;
 
+    /**
+     * The filter's own fields (`name => Field`, or a bare name), the same names the list filters and sorts by.
+     *
+     * @return array<int|string, mixed>
+     */
+    abstract protected function fields(): array;
+
     /** Adds the filter's conditions to the query. */
     abstract public function apply(Builder $builder): void;
 
@@ -49,9 +56,8 @@ trait HandlesExport
 
         $query = $this->query();
         $this->apply($query);
-        $this->exportWindow($query);
 
-        return app(ExportServiceInterface::class)->create(new ExportRequest(
+        return app(ExportServiceInterface::class)->create(new ExportDTO(
             source: static::class,
             format: ExportFormat::from($parameters['format']),
             query: $query,
@@ -74,9 +80,6 @@ trait HandlesExport
             'with' => (new static([]))->getWith(),
         ];
     }
-
-    /** Override to limit the query to the page the list would show; by default the whole filtered set is exported. */
-    protected function exportWindow(Builder $query): void {}
 
     /**
      * Whether a key exists is decided by the export itself, from the resource.
@@ -112,7 +115,35 @@ trait HandlesExport
             throw ValidationException::withMessages(['columns' => ['At least one column must come from the document itself, not from a list.']]);
         }
 
+        $this->assertExportable($list);
+
         return $list;
+    }
+
+    /**
+     * Rejects every document column that is not one of the filter's `fields()` names, naming each one. The items of a
+     * list are not filter fields; they are checked against the resource.
+     *
+     * @param  list<ExportColumn>  $columns
+     *
+     * @throws ValidationException
+     */
+    private function assertExportable(array $columns): void
+    {
+        $names = [];
+
+        foreach ($this->fields() as $name => $field) {
+            $names[] = (string) (is_string($name) ? $name : $field);
+        }
+
+        $refused = array_filter($columns, fn (ExportColumn $c): bool => $c->groups === [] && ! in_array($c->key, $names, true));
+
+        if ($refused !== []) {
+            throw ValidationException::withMessages(['columns' => array_values(array_map(
+                fn (ExportColumn $c): string => sprintf('Column "%s" is not a field of the filter.', $c->key),
+                $refused,
+            ))]);
+        }
     }
 
     /**

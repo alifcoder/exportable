@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Services\Interfaces;
 
-use Alif\Export\DTO\Export\ExportRequest;
+use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Events\ExportFinished;
 use Illuminate\Validation\ValidationException;
@@ -17,5 +17,5 @@ interface ExportServiceInterface
      *
      * @throws ValidationException When a column is unknown, the result is empty or over the row cap.
      */
-    public function create(ExportRequest $request): ExportTask;
+    public function create(ExportDTO $request): ExportTask;
 }
