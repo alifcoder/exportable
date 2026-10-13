@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
-use Alif\Export\Enums\ColumnType;
+use Alif\Export\Enums\ColumnTypeEnum;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Throwable;
@@ -93,15 +93,15 @@ final class ResourceRows
      * A resource renders through JSON, so a date arrives as text and a decimal as a numeric string: those are
      * recognised by their shape (and, for decimals, by the key), the rest by the value's own type.
      */
-    public static function typeOf(string $key, mixed $value): ?ColumnType
+    public static function typeOf(string $key, mixed $value): ?ColumnTypeEnum
     {
         return match (true) {
-            is_bool($value) => ColumnType::Boolean,
-            is_int($value), is_float($value) => ColumnType::Number,
+            is_bool($value) => ColumnTypeEnum::Boolean,
+            is_int($value), is_float($value) => ColumnTypeEnum::Number,
             ! is_string($value) => null,
-            preg_match(self::DATETIME_VALUE, $value) === 1 => ColumnType::DateTime,
-            preg_match(self::DATE_VALUE, $value) === 1 => ColumnType::Date,
-            is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => ColumnType::Number,
+            preg_match(self::DATETIME_VALUE, $value) === 1 => ColumnTypeEnum::DateTime,
+            preg_match(self::DATE_VALUE, $value) === 1 => ColumnTypeEnum::Date,
+            is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => ColumnTypeEnum::Number,
             default => null,
         };
     }

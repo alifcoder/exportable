@@ -7,7 +7,7 @@ namespace Alif\Export\Helpers;
 use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportDTO;
-use Alif\Export\Enums\ExportFormat;
+use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\Writers\Line;
 use BackedEnum;
@@ -47,7 +47,7 @@ final class ExportBuilder
         $empty = $rows !== null ? $rows === 0 : ! (clone $query)->reorder()->exists();
 
         if ($empty) {
-            throw ValidationException::withMessages(['columns' => ['There is no data to export.']]);
+            throw ValidationException::withMessages(['columns' => [__('export::messages.no_data')]]);
         }
     }
 
@@ -59,7 +59,7 @@ final class ExportBuilder
      *
      * @throws ValidationException
      */
-    public function assertWithinCap(ExportFormat $format, Builder $query, ?int $rows = null): void
+    public function assertWithinCap(ExportFormatEnum $format, Builder $query, ?int $rows = null): void
     {
         $cap = $format->maxRows();
 
@@ -67,7 +67,7 @@ final class ExportBuilder
 
         if ($exceeds) {
             throw ValidationException::withMessages([
-                'format' => [sprintf('Too many rows for %s export (maximum %d).', $format->value, $cap)],
+                'format' => [__('export::messages.too_many_rows', ['format' => $format->value, 'max' => $cap])],
             ]);
         }
     }
@@ -166,7 +166,7 @@ final class ExportBuilder
 
         if ($unknown !== []) {
             throw ValidationException::withMessages(['columns' => array_map(
-                fn (ExportColumn $c): string => sprintf('Unknown column "%s".', implode('.', [...$c->groups, $c->key])),
+                fn (ExportColumn $c): string => __('export::messages.unknown_column', ['column' => implode('.', [...$c->groups, $c->key])]),
                 $unknown,
             )]);
         }

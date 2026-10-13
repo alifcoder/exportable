@@ -15,7 +15,7 @@ Paging is by offset over a query ordered by the filter's sort and then the key, 
 1. `composer require alifcoder/exportable`
 2. `php artisan vendor:publish --tag=export-config`, set **every** key in `config/export.php` (a missing one fails with `Missing export configuration "export.<key>"`).
 3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id). Links, listing and deletion are the host's. There is no auth contract and no gate/ability/guard setting.
-4. Use `Concerns\HandlesExport` in your filter base class and implement `Contracts\ExportSource` (the trait provides `exportSource()`). The filter must provide `static $model`, `static $resource`, `params()`, `fields()` (a document column must be one of its names, otherwise 422 on `columns`; list items are checked against the resource), `query()` (the list's base query with its own selects/counts/ordering, the export starts from it), `apply()` and `getWith()`. Write the endpoint, authorise the caller there, call `$filter->export()`, and listen to `ExportFinished`.
+4. Use `Concerns\HandlesExport` in your filter base class and implement `Contracts\ExportSource` (the trait provides `exportSource()`). The filter must provide `static $model`, `static $resource`, `params()`, `fields()` (a document column must be one of its names, otherwise 422 on `columns`), the optional `exportLists()` (`['products' => [ItemFilter::class, 'serials' => SerialFilter::class]]`: the filter that reads each list's items, whose `fields()` names its columns; no list by default), `query()` (the list's base query with its own selects/counts/ordering, the export starts from it), `apply()` and `getWith()`. Write the endpoint, authorise the caller there, call `$filter->export()`, and listen to `ExportFinished`.
 5. Run a queue worker for `queue.name` with enough memory/timeout for xlsx. The queue connection's `retry_after` must exceed `queue.timeout`, otherwise a second worker picks up the running job.
 6. Authorize the private channel `export.{id}` (the id of the returned `ExportTask`) if you use progress events.
 7. The job runs without a request or a user, so the filter's resource must not depend on either to render a row.
@@ -64,6 +64,9 @@ A cell is written as its column's type, read from the values the resource yields
 | `Date`, `DateTime`, `Time` | a real Excel date with `xlsx.date_format`, `datetime_format`, `time_format` | text with the PHP formats of `style` |
 
 Dates arriving as text are parsed and shown in the `app.timezone`. A value that does not fit its type (text in a number column, a number over 15 digits, an unparsable date) is written as exact text, never rounded or dropped.
+
+## Messages
+The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `column_not_offered`, `too_many_columns`, `needs_document_column`, `nested_too_deep`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.

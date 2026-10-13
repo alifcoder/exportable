@@ -48,6 +48,12 @@
     "check": [
       "@lint",
       "@analyse"
-    ]
+    ],
+    "test": "phpunit"
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Alif\\Export\\Tests\\": "tests/"
+    }
   }
 }

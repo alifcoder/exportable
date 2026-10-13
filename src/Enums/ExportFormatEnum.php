@@ -10,7 +10,7 @@ use Alif\Export\Helpers\Writers\Writer;
 use Alif\Export\Helpers\Writers\XlsxWriter;
 
 /** The file formats an export can be written in. */
-enum ExportFormat: string
+enum ExportFormatEnum: string
 {
     case CSV = 'csv';
     case EXCEL = 'excel';

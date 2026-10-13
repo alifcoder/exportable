@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
-use Alif\Export\Enums\ColumnType;
+use Alif\Export\Enums\ColumnTypeEnum;
 use Carbon\CarbonInterface;
 
 /**
@@ -16,7 +16,7 @@ final readonly class Line
 {
     /**
      * @param  list<string|int|float|bool|CarbonInterface|null>  $cells
-     * @param  list<ColumnType|null>  $types  Declared type per cell; null reads the type of each value.
+     * @param  list<ColumnTypeEnum|null>  $types  Declared type per cell; null reads the type of each value.
      */
     public function __construct(
         public int $depth,

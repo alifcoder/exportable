@@ -8,7 +8,7 @@ namespace Alif\Export\Enums;
  * How a column's cells are written. A column without a type is read from each value: int, float, bool and
  * date objects keep their own type, everything else is text.
  */
-enum ColumnType: string
+enum ColumnTypeEnum: string
 {
     case String = 'string';
     /** A number, whole or decimal by the value of each cell. */

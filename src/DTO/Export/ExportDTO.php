@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Contracts\ExportSource;
-use Alif\Export\Enums\ExportFormat;
+use Alif\Export\Enums\ExportFormatEnum;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -21,7 +21,7 @@ final readonly class ExportDTO
      */
     public function __construct(
         public string $source,
-        public ExportFormat $format,
+        public ExportFormatEnum $format,
         public Builder $query,
         public array $columns,
     ) {}

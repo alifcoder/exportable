@@ -15,14 +15,15 @@ Breaking:
 
 - `HandlesExport::exportWindow()` hook is removed: the export always writes the whole filtered set, in one sheet. A limit/offset left on the list query is dropped, `PreparedQuery` loses `offset` and `limit` (queued payloads still carrying them are read fine).
 - `ExportRequest` is renamed `ExportDTO`.
-- A document column must be one of the filter's `fields()` names, otherwise 422 on `columns` (`Column "x" is not a field of the filter.`) before any query runs; the items of a list are only checked against the resource, as before.
+- The package ships its messages (`lang/{uz,ru,en}/messages.php`, `export::messages.*`): the request's 422 messages and a text per error code. Publish with the `export-lang` tag to override.
+- A requested column must be offered by the filter, otherwise 422 on `columns` (`Column "x" is not offered by the filter.`) before any query runs: a document column is one of its `fields()` names; a list column is one of the `fields()` names of the item filter named by the optional `exportLists()` hook (`list => ItemFilter::class`, or `list => [ItemFilter::class, 'inner' => InnerFilter::class]`; no list by default). The resource check still follows.
 - The filter provides `query()` (abstract in `HandlesExport`) and the export starts from it; the `exportQuery()` hook is removed.
 - `ExportBuilder::rows()` is `documents()` (one list of `Line`s per document); `ResourceRows::values()` is `read()` and `layout()` returns nested `values` and `lists`. `Writer::write()` takes `Line`s and the column widths. `ExportColumn::toArray()` carries `groups`.
 - `ExportRequest`/`ExportCreateDTO` lose `childRelation` and `childColumns` (lists are now columns with a `group`), `ExportBuilder::assertChildRelation()` is removed.
 - The package no longer knows who asked: `HandlesExport::export()` and `ExportServiceInterface::create()` take no owner, `ExportTask::$ownerId` is gone. With it go the per-owner quota (`ExportQuota`, `max_active_per_user`, `ExportException::tooManyActive()`/`forbidden()`/`ownerMissing()`, `httpStatus()`/`report()`/`render()`). `stale_margin_seconds` now only sets how long the "finished" announcement is remembered.
 - `ExportProgressed` broadcasts on the private channel `export.{id}` (was `App.Models.User.{ownerId}`) and has no `ownerId`.
 - `Writer::write()` takes no title; the xlsx sheet keeps the default name. `ExportFileName` is removed: the stored file is named `<task id>.<ext>` instead of after the filter class.
-- `ExportWriter` is replaced by `ExportFormat::writer()` and `StartExport` is folded into `ExportService`.
+- `ExportWriter` is replaced by `ExportFormatEnum::writer()` and `StartExport` is folded into `ExportService`.
 - `ExportTask::$locale` is gone: exports are always written in the worker's default locale, `WriteExport` no longer switches it. Queued payloads still carrying `locale` are read fine (the key is ignored).
 
 ## 0.6.0
@@ -32,7 +33,7 @@ The export is requested through the filter and settled before the job exists. Th
 Breaking:
 
 - New `Concerns\HandlesExport` trait (moved from the host) and `Contracts\ExportSource`. Request: top-level `format` (`csv` | `excel`) and `columns` (`key => heading`, one nested object = a HasMany relation's columns). `title`, `include_children`, `child_columns` and the `export` wrapper are gone; the file name comes from the filter class.
-- `ExportFormat::XLSX` (`xlsx`) is `ExportFormat::EXCEL` (`excel`, still a `.xlsx` file); the `max_rows.xlsx` config key is unchanged.
+- `ExportFormatEnum::XLSX` (`xlsx`) is `ExportFormatEnum::EXCEL` (`excel`, still a `.xlsx` file); the `max_rows.xlsx` config key is unchanged.
 - Removed `Exportable`, `ExportRegistry`, `ResourceExportable`, `ExportPlan`, `Column` and `ExportServiceInterface::definition()`. Columns are checked against the resource's output for a sample of rows on the request, which also sets their types.
 - `ExportServiceInterface::create()` takes an `ExportRequest` (source, format, the applied query, columns). `ExportCreateDTO` carries the compiled SQL, bindings and window (`PreparedQuery`) and typed `ExportColumn`s.
 - The job pages the prepared SQL by `limit/offset` in `chunk_size` rows (it used to snapshot the keys and reload them with the rebuilt filter). The `queue.middleware` config key and `RunExport::middleware()` are removed: the job needs no signed-in user, so there is nothing to wrap.
@@ -40,12 +41,12 @@ Breaking:
 
 ## 0.5.0
 
-Cell types: `Enums\ColumnType` (`String`, `Number`, `Integer`, `Decimal`, `Percent`, `Currency`, `Boolean`, `Date`, `DateTime`, `Time`), `Column::as()`, and a `types` map on `ResourceExportable`. A column without a type reads each value; `ResourceExportable` recognises dates, booleans and numbers from the resource output. xlsx writes real Excel dates; boolean text, percent, currency, time and date formats are configurable.
+Cell types: `Enums\ColumnTypeEnum` (`String`, `Number`, `Integer`, `Decimal`, `Percent`, `Currency`, `Boolean`, `Date`, `DateTime`, `Time`), `Column::as()`, and a `types` map on `ResourceExportable`. A column without a type reads each value; `ResourceExportable` recognises dates, booleans and numbers from the resource output. xlsx writes real Excel dates; boolean text, percent, currency, time and date formats are configurable.
 
 Breaking:
 
 - New required config keys: `style.time_format`, `style.boolean.{true,false}`, `style.xlsx.{percent_format,currency_format,date_format,datetime_format,time_format}`.
-- `Writer::write()` and `ExportWriter::store()` take a list of `?ColumnType` instead of a list of numeric flags; `ExportPlan::numeric()` is `types()`; `Column::isDate()` is gone (`type()`).
+- `Writer::write()` and `ExportWriter::store()` take a list of `?ColumnTypeEnum` instead of a list of numeric flags; `ExportPlan::numeric()` is `types()`; `Column::isDate()` is gone (`type()`).
 - Values reach the writers typed: a date stays a date object and a boolean stays a boolean (it used to be formatted text and `1`/`0`); the writer formats them. A column without a type now writes ints and floats as numbers and booleans as `style.boolean` text.
 - `ExportBuilder` no longer takes an `ExportStyle`.
 

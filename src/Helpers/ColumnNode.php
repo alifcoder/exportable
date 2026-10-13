@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers;
 
 use Alif\Export\DTO\Export\ExportColumn;
-use Alif\Export\Enums\ColumnType;
+use Alif\Export\Enums\ColumnTypeEnum;
 
 /**
  * The requested columns as a tree: the columns of one level (a document, or the items of one list) and the lists
@@ -58,7 +58,7 @@ final class ColumnNode
     /**
      * The types of this level's columns.
      *
-     * @return list<ColumnType|null>
+     * @return list<ColumnTypeEnum|null>
      */
     public function types(): array
     {

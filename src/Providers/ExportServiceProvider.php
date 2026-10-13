@@ -22,11 +22,14 @@ final class ExportServiceProvider extends ServiceProvider
         $this->app->bind(ExportServiceInterface::class, ExportService::class);
     }
 
-    /** Lets the host publish the config stub with `export-config`. */
+    /** Loads the package's messages (`export::messages.*`) and lets the host publish the config stub with `export-config`. */
     public function boot(): void
     {
+        $this->loadTranslationsFrom(__DIR__.'/../../lang', 'export');
+
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../../config/export.php' => config_path('export.php')], 'export-config');
+            $this->publishes([__DIR__.'/../../lang' => lang_path('vendor/export')], 'export-lang');
         }
     }
 }

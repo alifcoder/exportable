@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Contracts\ExportSource;
-use Alif\Export\Enums\ExportFormat;
+use Alif\Export\Enums\ExportFormatEnum;
 
 /** What the job writes, fully resolved on the request: the source class, format, typed columns and the prepared query. */
 final readonly class ExportCreateDTO
@@ -16,7 +16,7 @@ final readonly class ExportCreateDTO
      */
     public function __construct(
         public string $source,
-        public ExportFormat $format,
+        public ExportFormatEnum $format,
         public array $columns,
         public PreparedQuery $query,
     ) {}
@@ -30,7 +30,7 @@ final readonly class ExportCreateDTO
     {
         return new self(
             source: $data['source'],
-            format: ExportFormat::from($data['format']),
+            format: ExportFormatEnum::from($data['format']),
             columns: array_map(ExportColumn::fromArray(...), $data['columns']),
             query: PreparedQuery::fromArray($data['query']),
         );
