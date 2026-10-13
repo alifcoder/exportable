@@ -5,30 +5,34 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers;
 
 use Alif\Export\Enums\ExportFormatEnum;
+use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Validation\ValidationException;
 
 /**
- * The list's query as the export sees it: the whole filtered set on one page, in a stable order, plus the checks that
- * need only a count (nothing to export, too many rows). Used on the request, before the job exists.
+ * The checks on the host's query before the job exists: it can be read in chunks, it selects something, it fits the
+ * format. Every check works on a clone; the received query is never changed.
  */
 final class ExportQuery
 {
     /**
-     * The list's query without the page the list showed (limit, offset) and without eager loads, ordered by the
-     * filter's own sort and then by the key so that reading it in chunks never repeats or skips a row.
+     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and the chunks
+     * only follow each other without repeats or gaps when the query has an ORDER BY. The host prepares both.
      *
      * @param  Builder<*>  $query
-     * @return Builder<*>
+     *
+     * @throws ExportException
      */
-    public function wholeSet(Builder $query): Builder
+    public function assertPageable(Builder $query): void
     {
-        $whole = clone $query;
-        $whole->setEagerLoads([]);
-        $whole->getQuery()->limit = null;
-        $whole->getQuery()->offset = null;
+        $base = $query->getQuery();
 
-        return $whole->orderBy($whole->getModel()->getQualifiedKeyName());
+        if ($base->limit !== null || $base->offset !== null) {
+            throw ExportException::unpageableQuery('it has a limit or offset');
+        }
+
+        if ($base->orders === null || $base->orders === []) {
+            throw ExportException::unpageableQuery('it has no ORDER BY');
+        }
     }
 
     /**
@@ -49,14 +53,14 @@ final class ExportQuery
      * @param  Builder<*>  $query
      * @param  int|null  $count  The count when the caller already has it; otherwise one row is looked for.
      *
-     * @throws ValidationException
+     * @throws ExportException
      */
     public function assertNotEmpty(Builder $query, ?int $count): void
     {
         $empty = $count !== null ? $count === 0 : ! (clone $query)->reorder()->exists();
 
         if ($empty) {
-            throw ValidationException::withMessages(['columns' => [__('export::messages.no_data')]]);
+            throw ExportException::noData();
         }
     }
 
@@ -66,7 +70,7 @@ final class ExportQuery
      * @param  Builder<*>  $query
      * @param  int|null  $count  The count when the caller already has it; otherwise one row past the cap is looked for.
      *
-     * @throws ValidationException
+     * @throws ExportException
      */
     public function assertWithinCap(ExportFormatEnum $format, Builder $query, ?int $count): void
     {
@@ -74,9 +78,7 @@ final class ExportQuery
         $exceeds = $count !== null ? $count > $cap : (clone $query)->reorder()->offset($cap)->limit(1)->exists();
 
         if ($exceeds) {
-            throw ValidationException::withMessages([
-                'format' => [__('export::messages.too_many_rows', ['format' => $format->value, 'max' => $cap])],
-            ]);
+            throw ExportException::tooManyRows($format, $cap);
         }
     }
 }

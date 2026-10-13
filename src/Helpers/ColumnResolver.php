@@ -6,43 +6,67 @@ namespace Alif\Export\Helpers;
 
 use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\DTO\Export\ExportDTO;
-use Alif\Export\Enums\ColumnTypeEnum;
+use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Checks the requested columns against what the filter's resource really yields, and gives each column its type.
- * It renders a few rows of the list through the resource (a "sample") and looks the columns up in what came out.
+ * Checks the requested columns against what the export's resource really yields, and gives each column its type.
+ * It renders a few rows of the received query (with its own eager loads) through the resource, a "sample", and looks the
+ * columns up in what came out.
  */
 final class ColumnResolver
 {
     private const int SAMPLE_ROWS = 20;
 
     /**
-     * @param  Builder<*>  $query  The export's query ({@see ExportQuery::wholeSet()}).
+     * @param  Builder<*>  $query  The filter's query, read as given.
+     * @param  class-string<JsonResource>  $resource
      * @return list<ExportColumn> The requested columns, each with its type.
      *
-     * @throws ValidationException A column the resource does not yield.
+     * @throws ExportException A document column the resource does not yield, or a resource that fails.
      */
-    public function resolve(ExportDTO $request, Builder $query): array
+    public function resolve(ExportDTO $request, Builder $query, string $resource): array
     {
-        $source = $request->source::exportSource();
-        $rows = (clone $query)->reorder()->orderBy($query->getModel()->getQualifiedKeyName())->limit(self::SAMPLE_ROWS)->with($source['with'])->get();
-        $layout = (new ResourceRows($source['resource']))->layout($rows->all(), new $source['model']);
+        $layout = (new ResourceRows($resource))->layout($this->sample($query), $query->getModel()->newInstance());
 
         $unknown = array_filter($request->columns, fn (ExportColumn $c): bool => ! $this->isKnown($c, $layout));
 
         if ($unknown !== []) {
-            throw ValidationException::withMessages(['columns' => array_values(array_map(
-                fn (ExportColumn $c): string => __('export::messages.unknown_column', ['column' => implode('.', [...$c->groups, $c->key])]),
+            throw ExportException::unknownColumns(array_values(array_map(
+                fn (ExportColumn $c): string => implode('.', [...$c->groups, $c->key]),
                 $unknown,
-            ))]);
+            )));
         }
 
         return array_map(
-            fn (ExportColumn $c): ExportColumn => $c->withType(ColumnTypeEnum::guess($c->key, $this->levelOf($c, $layout)['values'][$c->key] ?? null)),
+            fn (ExportColumn $c): ExportColumn => $c->withType($c->type ?? CellType::guess($c->key, $this->levelOf($c, $layout)['values'][$c->key] ?? null)),
             $request->columns,
         );
+    }
+
+    /**
+     * The first rows of the query as it was received (its order and eager loads kept), read with lazy loading blocked
+     * like the job reads them. The received query is not touched.
+     *
+     * @param  Builder<*>  $query
+     * @return list<Model>
+     */
+    private function sample(Builder $query): array
+    {
+        $previous = Model::preventsLazyLoading();
+        Model::preventLazyLoading();
+
+        try {
+            $rows = (clone $query)->limit(self::SAMPLE_ROWS)->get();
+            // Eloquent only arms the lazy loading guard for result sets with more than one model; arm it for every row.
+            $rows->each(fn (Model $m) => $m->preventsLazyLoading = true);
+
+            return $rows->all();
+        } finally {
+            Model::preventLazyLoading($previous);
+        }
     }
 
     /**
@@ -69,18 +93,15 @@ final class ColumnResolver
      */
     private function isKnown(ExportColumn $column, array $layout): bool
     {
-        $level = $this->levelOf($column, $layout);
-
-        if ($level === null) {
-            return false;
-        }
-
-        // No sampled document had items in this list, so there are no keys to check: the list itself exists, its keys are accepted untyped.
-        if ($column->groups !== [] && $level['values'] === [] && $level['lists'] === []) {
+        // A list item column is tried and written empty when the item does not yield it; the filter has already checked
+        // that the list and the column are offered. Only a document column must exist in the resource.
+        if ($column->groups !== []) {
             return true;
         }
 
-        return array_key_exists($column->key, $level['values']) || $this->isUnderNullObject($column->key, $level['values']);
+        $level = $this->levelOf($column, $layout);
+
+        return $level !== null && (array_key_exists($column->key, $level['values']) || $this->isUnderNullObject($column->key, $level['values']));
     }
 
     /**

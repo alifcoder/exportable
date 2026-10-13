@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
-use Alif\Export\Enums\ColumnTypeEnum;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
+use Alif\QueryFilter\Enums\FieldType;
 use OpenSpout\Common\Entity\Cell\DateTimeCell;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
@@ -137,14 +137,12 @@ final class XlsxWriter implements Writer
         $format = fn (string $format): Style => (clone $this->baseStyle())->setFormat($format);
 
         return [
-            ColumnTypeEnum::String->value => $this->baseStyle(),
-            ColumnTypeEnum::Integer->value => $format($this->style->integerFormat()),
-            ColumnTypeEnum::Decimal->value => $format($this->style->numberFormat()),
-            ColumnTypeEnum::Percent->value => $format($this->style->percentFormat()),
-            ColumnTypeEnum::Currency->value => $format($this->style->currencyFormat()),
-            ColumnTypeEnum::Date->value => $format($this->style->dateCellFormat()),
-            ColumnTypeEnum::DateTime->value => $format($this->style->dateTimeCellFormat()),
-            ColumnTypeEnum::Time->value => $format($this->style->timeCellFormat()),
+            FieldType::String->value => $this->baseStyle(),
+            FieldType::Integer->value => $format($this->style->integerFormat()),
+            FieldType::Decimal->value => $format($this->style->numberFormat()),
+            FieldType::Date->value => $format($this->style->dateCellFormat()),
+            FieldType::DateTime->value => $format($this->style->dateTimeCellFormat()),
+            FieldType::Time->value => $format($this->style->timeCellFormat()),
         ];
     }
 
@@ -159,12 +157,12 @@ final class XlsxWriter implements Writer
 
         foreach ($line->cells as $i => $value) {
             $cell = TypedValue::of($line->types[$i] ?? null, $value);
-            $style = $styles[$cell->type->value] ?? $styles[ColumnTypeEnum::String->value];
+            $style = $styles[$cell->type->value] ?? $styles[FieldType::String->value];
 
             $cells[] = match ($cell->type) {
-                ColumnTypeEnum::Integer, ColumnTypeEnum::Decimal, ColumnTypeEnum::Percent, ColumnTypeEnum::Currency => new NumericCell($cell->value, $style),
-                ColumnTypeEnum::Date, ColumnTypeEnum::DateTime, ColumnTypeEnum::Time => new DateTimeCell($cell->value->toDateTimeImmutable(), $style),
-                ColumnTypeEnum::Boolean => new StringCell($this->style->booleanLabel($cell->value), $style),
+                FieldType::Integer, FieldType::Decimal => new NumericCell($cell->value, $style),
+                FieldType::Date, FieldType::DateTime, FieldType::Time => new DateTimeCell($cell->value->toDateTimeImmutable(), $style),
+                FieldType::Boolean => new StringCell($this->style->booleanLabel($cell->value), $style),
                 default => new StringCell($cell->value, $style),
             };
 
@@ -179,13 +177,12 @@ final class XlsxWriter implements Writer
     private function length(TypedValue $cell): int
     {
         return match ($cell->type) {
-            ColumnTypeEnum::Integer => strlen(number_format((float) $cell->value, 0)),
-            ColumnTypeEnum::Decimal, ColumnTypeEnum::Currency => strlen(number_format((float) $cell->value, 2)),
-            ColumnTypeEnum::Percent => strlen(number_format((float) $cell->value, 2)) + 1,
-            ColumnTypeEnum::Date => strlen($this->style->dateCellFormat()),
-            ColumnTypeEnum::DateTime => strlen($this->style->dateTimeCellFormat()),
-            ColumnTypeEnum::Time => strlen($this->style->timeCellFormat()),
-            ColumnTypeEnum::Boolean => mb_strlen($this->style->booleanLabel($cell->value)),
+            FieldType::Integer => strlen(number_format((float) $cell->value, 0)),
+            FieldType::Decimal => strlen(number_format((float) $cell->value, 2)),
+            FieldType::Date => strlen($this->style->dateCellFormat()),
+            FieldType::DateTime => strlen($this->style->dateTimeCellFormat()),
+            FieldType::Time => strlen($this->style->timeCellFormat()),
+            FieldType::Boolean => mb_strlen($this->style->booleanLabel($cell->value)),
             default => mb_strlen((string) $cell->value),
         };
     }

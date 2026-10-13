@@ -103,18 +103,6 @@ final readonly class ExportStyle
         return ExportConfig::string('style.xlsx.integer_format');
     }
 
-    /** Excel number format of percent cells, e.g. `0.00"%"` (25 is shown as 25.00%). */
-    public function percentFormat(): string
-    {
-        return ExportConfig::string('style.xlsx.percent_format');
-    }
-
-    /** Excel number format of currency cells, e.g. `#,##0.00`. */
-    public function currencyFormat(): string
-    {
-        return ExportConfig::string('style.xlsx.currency_format');
-    }
-
     /** Excel date format of date cells, e.g. `yyyy-mm-dd`. */
     public function dateCellFormat(): string
     {

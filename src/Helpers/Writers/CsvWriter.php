@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
-use Alif\Export\Enums\ColumnTypeEnum;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportStyle;
+use Alif\QueryFilter\Enums\FieldType;
 use Carbon\CarbonInterface;
 
 /** Writes the export as a csv file, line by line. */
@@ -55,7 +55,7 @@ final class CsvWriter implements Writer
      * read as a formula is neutralised, a number never is.
      *
      * @param  list<string|int|float|bool|CarbonInterface|null>  $row
-     * @param  list<ColumnTypeEnum|null>  $types
+     * @param  list<FieldType|null>  $types
      * @return list<string|int|float>
      */
     private function cells(array $row, array $types): array
@@ -66,11 +66,11 @@ final class CsvWriter implements Writer
             $cell = TypedValue::of($types[$i] ?? null, $value);
 
             $out[] = match ($cell->type) {
-                ColumnTypeEnum::Integer, ColumnTypeEnum::Decimal, ColumnTypeEnum::Percent, ColumnTypeEnum::Currency => $cell->raw,
-                ColumnTypeEnum::Boolean => $this->style->booleanLabel($cell->value),
-                ColumnTypeEnum::Date => $cell->value->format($this->style->dateFormat()),
-                ColumnTypeEnum::DateTime => $cell->value->format($this->style->dateTimeFormat()),
-                ColumnTypeEnum::Time => $cell->value->format($this->style->timeFormat()),
+                FieldType::Integer, FieldType::Decimal => $cell->raw,
+                FieldType::Boolean => $this->style->booleanLabel($cell->value),
+                FieldType::Date => $cell->value->format($this->style->dateFormat()),
+                FieldType::DateTime => $cell->value->format($this->style->dateTimeFormat()),
+                FieldType::Time => $cell->value->format($this->style->timeFormat()),
                 default => $this->neutralised($cell->value),
             };
         }

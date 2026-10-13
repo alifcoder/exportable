@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportQuery;
 use Illuminate\Database\Eloquent\Builder;
 
 /** The list query saved as SQL text and bindings, so the job can run it later without the request. */
@@ -21,7 +22,8 @@ final readonly class PreparedQuery
     ) {}
 
     /**
-     * Turns an Eloquent query into SQL and bindings. The job appends its own `limit`/`offset` to read chunk by chunk.
+     * Turns an Eloquent query into SQL and bindings. The job appends its own `limit`/`offset` to read chunk by chunk,
+     * so the query must have neither (see {@see ExportQuery::assertPageable()}).
      *
      * @param Builder<*> $builder The applied, ordered list query.
      */
@@ -33,9 +35,8 @@ final readonly class PreparedQuery
             throw ExportException::invalidRegistration(sprintf('Export cannot page the "%s" driver.', $connection->getDriverName()));
         }
 
-        $base = $builder->toBase();
-        $base->limit = null;
-        $base->offset = null;
+        // A clone, so compiling never changes the received builder; compiled exactly as given.
+        $base = (clone $builder)->toBase();
 
         return new self($builder->getModel()->getConnectionName(), $base->toSql(), $base->getBindings());
     }

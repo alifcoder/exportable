@@ -8,6 +8,7 @@ use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\DTO\Export\PreparedQuery;
+use Alif\Export\DTO\Export\RowSource;
 use Alif\Export\Helpers\ColumnResolver;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportQuery;
@@ -24,22 +25,27 @@ final readonly class ExportService implements ExportServiceInterface
     ) {}
 
     /**
-     * Everything is decided here, before the job exists: the columns are checked, the rows counted, the query
-     * compiled. The job only reads the prepared SQL and writes the file.
+     * Everything is decided here, before the job exists: the query is checked, the rows counted, the columns checked,
+     * the query compiled. The received query is only read, never changed. The job only reads the prepared SQL and
+     * writes the file.
      */
     public function create(ExportDTO $request): ExportTask
     {
-        $query = $this->query->wholeSet($request->query);
+        // Asked once: every check, the eager-load record and the compiled SQL read this one builder.
+        $query = $request->source->exportQuery();
+        $resource = $request->source->exportResource();
+        $this->query->assertPageable($query);
+        $rows = RowSource::from($query, $resource);
         // Counted once: the same number is the progress denominator and the cap check.
         $count = ExportConfig::bool('progress.enabled') ? $this->query->count($query) : null;
         $this->query->assertNotEmpty($query, $count);
         $this->query->assertWithinCap($request->format, $query, $count);
 
         $dto = new ExportCreateDTO(
-            $request->source,
             $request->format,
-            $this->columns->resolve($request, $query),
+            $this->columns->resolve($request, $query, $resource),
             PreparedQuery::from($query),
+            $rows,
         );
 
         $task = new ExportTask((string) Str::uuid(), $dto, $count);

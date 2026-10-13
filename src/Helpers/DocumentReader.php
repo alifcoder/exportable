@@ -29,13 +29,12 @@ final class DocumentReader
      */
     public function documents(ExportCreateDTO $dto): Generator
     {
-        $source = $dto->source::exportSource();
-        $resource = new ResourceRows($source['resource']);
+        $resource = new ResourceRows($dto->rows->resource);
         $tree = ColumnNode::tree($dto->columns);
         $cap = $dto->format->maxRows();
         $written = 0;
 
-        foreach ($this->models($dto, $source['model'], $source['with']) as $model) {
+        foreach ($this->models($dto) as $model) {
             $lines = $this->lines($tree, $resource->read($model));
             $written += count($lines);
 
@@ -50,15 +49,13 @@ final class DocumentReader
     /**
      * The models of the prepared query, loaded `chunk_size` at a time with the relations the resource touches.
      *
-     * @param  class-string<Model>  $class
-     * @param  array<int|string, mixed>  $with
      * @return Generator<int, Model>
      */
-    private function models(ExportCreateDTO $dto, string $class, array $with): Generator
+    private function models(ExportCreateDTO $dto): Generator
     {
         $query = $dto->query;
         $connection = DB::connection($query->connection);
-        $model = new $class;
+        $model = new $dto->rows->model;
         $chunk = max(1, ExportConfig::int('chunk_size'));
 
         for ($offset = 0; ; $offset += $chunk) {
@@ -67,7 +64,7 @@ final class DocumentReader
             $models = $model->newCollection(array_map(fn (object $record): Model => $model->newFromBuilder((array) $record, $query->connection), $records));
             // Eloquent only arms the lazy loading guard for result sets with more than one model; arm it for every row.
             $models->each(fn (Model $m) => $m->preventsLazyLoading = Model::preventsLazyLoading());
-            $models->load($with);
+            $models->load($dto->rows->relations);
 
             yield from $models;
 
@@ -86,7 +83,7 @@ final class DocumentReader
     private function lines(ColumnNode $node, array $read): array
     {
         $lines = [new Line($node->depth, array_map(
-            fn (ExportColumn $column): string|int|float|bool|null => $this->cell($read['values'][$column->key] ?? null, $column->key),
+            fn (ExportColumn $column): string|int|float|bool|null => $this->cell($read['values'][$column->key] ?? null, $column),
             $node->columns,
         ), $node->types())];
 
@@ -108,14 +105,16 @@ final class DocumentReader
         return $lines;
     }
 
-    /** A value as a simple cell value: an enum becomes its value; an array or object cannot be a cell. */
-    private function cell(mixed $value, string $key): string|int|float|bool|null
+    /**
+     * A value as a simple cell value: an enum becomes its value; an array or object cannot be a cell.
+     */
+    private function cell(mixed $value, ExportColumn $column): string|int|float|bool|null
     {
         return match (true) {
             $value === null => null,
             $value instanceof BackedEnum => $value->value,
             is_scalar($value) => $value,
-            default => throw ExportException::invalidColumnValue($key),
+            default => throw ExportException::invalidColumnValue($column->key),
         };
     }
 }

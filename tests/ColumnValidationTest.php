@@ -7,10 +7,10 @@ namespace Alif\Export\Tests;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\DTO\Export\ExportTask;
+use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
 use Alif\Export\Tests\Fixtures\DocFilter;
 use Illuminate\Support\Arr;
-use Illuminate\Validation\ValidationException;
 
 final class ColumnValidationTest extends TestCase
 {
@@ -55,8 +55,8 @@ final class ColumnValidationTest extends TestCase
     {
         try {
             $this->export($columns);
-        } catch (ValidationException $e) {
-            return $e->errors()['columns'] ?? [];
+        } catch (ExportException $e) {
+            return $e->errors['columns'] ?? [];
         }
 
         return [];
@@ -95,21 +95,21 @@ final class ColumnValidationTest extends TestCase
         ], $errors);
     }
 
-    public function test_refuses_a_list_the_filter_does_not_name_as_a_whole(): void
+    public function test_accepts_a_list_the_filter_does_not_name_and_leaves_it_unchecked(): void
     {
-        $this->assertSame(['Column "approvals" is not offered by the filter.'], $this->errors(['number' => 'No', 'approvals' => ['status' => 'S']]));
+        $this->assertSame([], $this->errors(['number' => 'No', 'approvals' => ['status' => 'S']]));
+        $this->assertSame(['approvals'], $this->received->columns[1]->groups);
     }
 
-    public function test_a_list_cannot_hide_inside_another_lists_items(): void
+    public function test_a_list_inside_another_lists_items_is_accepted_unchecked(): void
     {
-        $this->assertSame(['Column "lines.notes" is not offered by the filter.'], $this->errors(['number' => 'No', 'lines' => ['quantity' => 'Q', 'notes' => ['text' => 'T']]]));
+        $this->assertSame([], $this->errors(['number' => 'No', 'lines' => ['quantity' => 'Q', 'notes' => ['text' => 'T']]]));
+        $this->assertSame(['lines', 'notes'], $this->received->columns[2]->groups);
     }
 
-    public function test_an_item_filter_class_is_not_a_list_name(): void
+    public function test_an_item_filter_class_key_is_read_as_an_unchecked_list(): void
     {
-        $errors = $this->errors(['number' => 'No', 'lines' => ['quantity' => 'Q', '0' => ['imei' => 'I']]]);
-
-        $this->assertSame(['Column "lines.0" is not offered by the filter.'], $errors);
+        $this->assertSame([], $this->errors(['number' => 'No', 'lines' => ['quantity' => 'Q', '0' => ['imei' => 'I']]]));
     }
 
     public function test_needs_a_document_column(): void

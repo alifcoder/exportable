@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace Alif\Export\Jobs;
 
 use Alif\Export\Contracts\ExportFileStore;
+use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportTask;
+use Alif\Export\DTO\Export\PreparedQuery;
+use Alif\Export\DTO\Export\RowSource;
+use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Services\Actions\Export\WriteExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -25,7 +31,7 @@ final class RunExport implements ShouldQueue
     use Queueable;
 
     /** Operator-facing ExportException codes that must reach the exception handler. */
-    private const array REPORTED_CODES = ['storage_write_failed'];
+    private const array REPORTED_CODES = ['storage_write_failed', 'resource_failed', 'unsupported_eager_load'];
 
     public int $tries = 1;
 
@@ -42,17 +48,18 @@ final class RunExport implements ShouldQueue
     /** Writes the file to a temporary path, gives it to the file store, and removes it. A failure is announced, not thrown. */
     public function handle(WriteExport $write, ExportFileStore $store): void
     {
-        $task = ExportTask::fromArray($this->task);
+        $task = null;
         $local = false;
 
         try {
+            $task = ExportTask::fromArray($this->task);
             $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed('cannot create a temporary file');
             $rows = $write($task, $local);
             $name = $task->id.'.'.$task->request->format->extension();
             $fileId = $store->put($task, $local, $name, $task->request->format->mimeType());
             $finished = new ExportFinished($task, $fileId, $name, $rows, null);
         } catch (Throwable $e) {
-            $finished = $this->failure($task, $e);
+            $finished = $this->failure($task ?? $this->placeholder(), $e);
         } finally {
             if ($local !== false) {
                 @unlink($local);
@@ -65,7 +72,13 @@ final class RunExport implements ShouldQueue
     /** Called by the queue when the worker is killed (timeout) or the job crashes outside handle(). */
     public function failed(Throwable $e): void
     {
-        $this->announce($this->failure(ExportTask::fromArray($this->task), $e));
+        try {
+            $task = ExportTask::fromArray($this->task);
+        } catch (Throwable) {
+            $task = $this->placeholder();
+        }
+
+        $this->announce($this->failure($task, $e));
     }
 
     /** Turns an error into a failed `ExportFinished` event. Unexpected errors are also reported. */
@@ -96,5 +109,21 @@ final class RunExport implements ShouldQueue
         } catch (Throwable $listenerError) {
             report($listenerError);
         }
+    }
+
+    /**
+     * A payload that cannot be read (queued by an older version) still has its id: the failure is announced for that
+     * id, with an empty task around it.
+     */
+    private function placeholder(): ExportTask
+    {
+        $request = is_array($this->task['request'] ?? null) ? $this->task['request'] : [];
+        $format = ExportFormatEnum::tryFrom((string) ($request['format'] ?? '')) ?? ExportFormatEnum::EXCEL;
+
+        return new ExportTask(
+            (string) ($this->task['id'] ?? ''),
+            new ExportCreateDTO($format, [], new PreparedQuery(null, '', []), new RowSource(Model::class, JsonResource::class, [])),
+            null,
+        );
     }
 }

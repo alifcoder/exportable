@@ -74,8 +74,6 @@ return [
             // Excel number formats of numeric cells.
             'number_format' => '#,##0.00',
             'integer_format' => '#,##0',
-            'percent_format' => '0.00"%"',
-            'currency_format' => '#,##0.00',
             // Excel formats of date cells (Excel syntax, not PHP date()): real dates, sortable and filterable.
             'date_format' => 'yyyy-mm-dd',
             'datetime_format' => 'yyyy-mm-dd hh:mm:ss',

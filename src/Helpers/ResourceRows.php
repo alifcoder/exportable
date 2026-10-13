@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
+use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Throwable;
@@ -12,6 +13,8 @@ use Throwable;
  * Reads a model the way the API shows it: through its resource, flattened into dotted keys (`business_partner.name`).
  * A list the resource renders (`products`) is kept apart, one flat map per item. The resource is the single source of
  * values, so the relations it touches must be eager loaded.
+ *
+ * A resource that throws while rendering a real row fails with {@see ExportException::resourceFailed()}.
  */
 final class ResourceRows
 {
@@ -92,7 +95,7 @@ final class ResourceRows
             return json_decode((string) json_encode((new ($this->resource)($row))->resolve(request())), true) ?? [];
         } catch (Throwable $e) {
             if (! $lenient) {
-                throw $e;
+                throw $e instanceof ExportException ? $e : ExportException::resourceFailed($this->resource, $e);
             }
 
             return [];

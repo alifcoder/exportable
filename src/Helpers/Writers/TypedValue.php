@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers\Writers;
 
-use Alif\Export\Enums\ColumnTypeEnum;
+use Alif\Export\Helpers\CellType;
+use Alif\QueryFilter\Enums\FieldType;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Throwable;
@@ -20,21 +21,21 @@ final readonly class TypedValue
     private const int MAX_SAFE_DIGITS = 15;
 
     /** @param mixed $raw The value as given: csv writes a number exactly as it came (`5.250000`, `1.5e3`). */
-    private function __construct(public ColumnTypeEnum $type, public mixed $value, public mixed $raw = null) {}
+    private function __construct(public FieldType $type, public mixed $value, public mixed $raw = null) {}
 
     /** Gives a value its type: the column's declared type or, when there is none, the type of the value itself. */
-    public static function of(?ColumnTypeEnum $declared, mixed $value): self
+    public static function of(?FieldType $declared, mixed $value): self
     {
         if ($value === null || $value === '') {
-            return new self(ColumnTypeEnum::String, '');
+            return new self(FieldType::String, '');
         }
 
         return match (true) {
             $declared === null => self::inferred($value),
-            $declared->isNumeric() => self::number($declared, $value),
-            $declared === ColumnTypeEnum::Boolean => self::boolean($value),
-            $declared->isTemporal() => self::temporal($declared, $value),
-            default => new self(ColumnTypeEnum::String, (string) $value),
+            CellType::isNumeric($declared) => self::number($declared, $value),
+            $declared === FieldType::Boolean => self::boolean($value),
+            CellType::isTemporal($declared) => self::temporal($declared, $value),
+            default => new self(FieldType::String, (string) $value),
         };
     }
 
@@ -42,29 +43,26 @@ final readonly class TypedValue
     private static function inferred(mixed $value): self
     {
         return match (true) {
-            is_bool($value) => new self(ColumnTypeEnum::Boolean, $value),
-            $value instanceof CarbonInterface => new self(ColumnTypeEnum::DateTime, $value),
-            is_int($value), is_float($value) => self::number(ColumnTypeEnum::Number, $value),
-            default => new self(ColumnTypeEnum::String, (string) $value),
+            is_bool($value) => new self(FieldType::Boolean, $value),
+            $value instanceof CarbonInterface => new self(FieldType::DateTime, $value),
+            is_int($value), is_float($value) => self::number(null, $value),
+            default => new self(FieldType::String, (string) $value),
         };
     }
 
-    /** Makes a number cell. Text or a number that is too long stays as exact text. */
-    private static function number(ColumnTypeEnum $type, mixed $value): self
+    /** Makes a number cell, of the declared type or (none) whole or decimal by the value. Text or a number that is too long stays as exact text. */
+    private static function number(?FieldType $type, mixed $value): self
     {
         $isNumber = (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value)))
             && self::digits((string) $value) <= self::MAX_SAFE_DIGITS;
 
         if (! $isNumber) {
-            return new self(ColumnTypeEnum::String, (string) $value);
+            return new self(FieldType::String, (string) $value);
         }
 
         $number = $value + 0;
 
-        return new self(match ($type) {
-            ColumnTypeEnum::Number => is_int($number) ? ColumnTypeEnum::Integer : ColumnTypeEnum::Decimal,
-            default => $type,
-        }, $number, $value);
+        return new self($type ?? (is_int($number) ? FieldType::Integer : FieldType::Decimal), $number, $value);
     }
 
     /** Makes a true/false cell from `true`, `false`, `1`, `0` and their text forms. Anything else stays as text. */
@@ -77,18 +75,18 @@ final readonly class TypedValue
             default => null,
         };
 
-        return $flag === null ? new self(ColumnTypeEnum::String, (string) $value) : new self(ColumnTypeEnum::Boolean, $flag);
+        return $flag === null ? new self(FieldType::String, (string) $value) : new self(FieldType::Boolean, $flag);
     }
 
     /** Makes a date or time cell and converts it to the app timezone. Text that is not a date stays as text. */
-    private static function temporal(ColumnTypeEnum $type, mixed $value): self
+    private static function temporal(FieldType $type, mixed $value): self
     {
         try {
             $moment = $value instanceof CarbonInterface
                 ? $value
                 : CarbonImmutable::parse((string) $value)->setTimezone((string) config('app.timezone'));
         } catch (Throwable) {
-            return new self(ColumnTypeEnum::String, (string) $value);
+            return new self(FieldType::String, (string) $value);
         }
 
         return new self($type, $moment);

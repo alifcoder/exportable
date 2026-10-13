@@ -5,7 +5,7 @@
   "license": "proprietary",
   "require": {
     "php": "^8.3",
-    "alifcoder/query-filter": "^2.0.1",
+    "alifcoder/query-filter": "^2.0.2",
     "illuminate/auth": "^13.0",
     "illuminate/database": "^13.0",
     "illuminate/http": "^13.0",

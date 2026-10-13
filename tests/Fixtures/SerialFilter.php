@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Alif\Export\Tests\Fixtures;
 
+use Alif\QueryFilter\Field;
+
 /** Names the columns of the serials of a line. */
 class SerialFilter
 {
@@ -13,6 +15,6 @@ class SerialFilter
     /** @return array<int|string, mixed> */
     protected function fields(): array
     {
-        return ['imei' => 1];
+        return ['imei' => Field::make('imei')];
     }
 }
