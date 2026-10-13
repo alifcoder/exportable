@@ -23,6 +23,32 @@ enum ColumnTypeEnum: string
     case DateTime = 'datetime';
     case Time = 'time';
 
+    /** Keys ending like this are numbers when their value is a numeric string (decimals come as strings). */
+    private const string NUMERIC_KEY = '/(sum|price|quantity|amount|total|rate|cost|balance|discount)$/';
+
+    /** A date-time as a resource renders it (`2026-03-04T05:06:07Z`), and a date alone. */
+    private const string DATETIME_VALUE = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/';
+
+    private const string DATE_VALUE = '/^\d{4}-\d{2}-\d{2}$/';
+
+    /**
+     * The type of a column read from one value of the resource's output. A resource renders through JSON, so a date
+     * arrives as text and a decimal as a numeric string: those are recognised by their shape (a decimal also by its
+     * key), the rest by the value's own type. Null when nothing is recognised: the column is then read cell by cell.
+     */
+    public static function guess(string $key, mixed $value): ?self
+    {
+        return match (true) {
+            is_bool($value) => self::Boolean,
+            is_int($value), is_float($value) => self::Number,
+            ! is_string($value) => null,
+            preg_match(self::DATETIME_VALUE, $value) === 1 => self::DateTime,
+            preg_match(self::DATE_VALUE, $value) === 1 => self::Date,
+            is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => self::Number,
+            default => null,
+        };
+    }
+
     /** True for the types that are written as numbers. */
     public function isNumeric(): bool
     {

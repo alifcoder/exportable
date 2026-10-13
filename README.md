@@ -65,6 +65,21 @@ A cell is written as its column's type, read from the values the resource yields
 
 Dates arriving as text are parsed and shown in the `app.timezone`. A value that does not fit its type (text in a number column, a number over 15 digits, an unparsable date) is written as exact text, never rounded or dropped.
 
+## Internals
+One export is two steps, on the request and in the queued job; the whole filtered set is exported as one page (a `limit`/`offset` the list put on its query is dropped).
+
+| Class | Step | What it does |
+|---|---|---|
+| `Services\ExportService` | request | runs the steps below in order and queues `RunExport` |
+| `Helpers\ExportQuery` | request | the query as a whole set in a stable order; counts it; refuses an empty result or one over the format's cap |
+| `Helpers\ColumnResolver` | request | renders a sample of rows through the resource, refuses a column the resource does not yield, gives each column its type (`ColumnTypeEnum::guess()`) |
+| `Helpers\ResourceRows` | both | reads a model through its resource into dotted keys (`partner.name`) and lists (`products`) |
+| `Helpers\DocumentReader` | job | reads the prepared SQL `chunk_size` rows at a time and turns each document into `Line`s (own line, then heading and item lines of each list) |
+| `Helpers\ColumnNode` | job | the requested columns as a tree (document, lists, lists in lists): headings, types, widths |
+| `Helpers\ExportProgress` | job | passes documents through and broadcasts `ExportProgressed` |
+| `Helpers\ExportStyle`, `Helpers\Writers\*` | job | the `style.*` settings; `CsvWriter` / `XlsxWriter` write the `Line`s |
+| `Helpers\ExportConfig` | both | reads `config/export.php`; a missing key is an error, the package has no defaults |
+
 ## Messages
 The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `column_not_offered`, `needs_document_column`, `nested_too_deep`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
 

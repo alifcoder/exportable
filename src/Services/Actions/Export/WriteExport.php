@@ -7,7 +7,7 @@ namespace Alif\Export\Services\Actions\Export;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ColumnNode;
-use Alif\Export\Helpers\ExportBuilder;
+use Alif\Export\Helpers\DocumentReader;
 use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Helpers\Writers\Line;
 use Generator;
@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 final readonly class WriteExport
 {
     public function __construct(
-        private ExportBuilder $builder,
+        private DocumentReader $reader,
         private ExportProgress $progress,
     ) {}
 
@@ -40,7 +40,7 @@ final readonly class WriteExport
             return $dto->format->writer()->write(
                 $tree->headings(),
                 $tree->types(),
-                $this->lines($this->progress->track($task, $this->builder->documents($dto))),
+                $this->lines($this->progress->track($task, $this->reader->documents($dto))),
                 $path,
                 $tree->widths(),
             );

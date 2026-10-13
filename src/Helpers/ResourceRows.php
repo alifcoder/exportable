@@ -4,26 +4,17 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
-use Alif\Export\Enums\ColumnTypeEnum;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Throwable;
 
 /**
- * Reads a model the way the API shows it: through its resource, flattened into dotted keys
- * (`business_partner.name`); a list the resource renders (`products`) is kept apart, one flat map per item. The resource is the single source of values, so the relations it touches must be
- * eager loaded.
+ * Reads a model the way the API shows it: through its resource, flattened into dotted keys (`business_partner.name`).
+ * A list the resource renders (`products`) is kept apart, one flat map per item. The resource is the single source of
+ * values, so the relations it touches must be eager loaded.
  */
 final class ResourceRows
 {
-    /** Keys ending like this are numeric when their value is a numeric string (decimals come as strings). */
-    private const string NUMERIC_KEY = '/(sum|price|quantity|amount|total|rate|cost|balance|discount)$/';
-
-    /** An ISO 8601 date-time as Laravel serialises a date; a date alone. */
-    private const string DATETIME_VALUE = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/';
-
-    private const string DATE_VALUE = '/^\d{4}-\d{2}-\d{2}$/';
-
     /** @param class-string<JsonResource> $resource */
     public function __construct(private readonly string $resource) {}
 
@@ -87,23 +78,6 @@ final class ResourceRows
     private function unshadowed(array $layout): array
     {
         return ['values' => $this->withoutShadowed($layout['values']), 'lists' => array_map($this->unshadowed(...), $layout['lists'])];
-    }
-
-    /**
-     * A resource renders through JSON, so a date arrives as text and a decimal as a numeric string: those are
-     * recognised by their shape (and, for decimals, by the key), the rest by the value's own type.
-     */
-    public static function typeOf(string $key, mixed $value): ?ColumnTypeEnum
-    {
-        return match (true) {
-            is_bool($value) => ColumnTypeEnum::Boolean,
-            is_int($value), is_float($value) => ColumnTypeEnum::Number,
-            ! is_string($value) => null,
-            preg_match(self::DATETIME_VALUE, $value) === 1 => ColumnTypeEnum::DateTime,
-            preg_match(self::DATE_VALUE, $value) === 1 => ColumnTypeEnum::Date,
-            is_numeric($value) && preg_match(self::NUMERIC_KEY, $key) === 1 => ColumnTypeEnum::Number,
-            default => null,
-        };
     }
 
     /**
