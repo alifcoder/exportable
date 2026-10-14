@@ -16,7 +16,7 @@ Added:
 - `with` (relation names): each must be a relation of the model, else a 422 on `with`.
 - A column's cell type is read from the filter's `Field::type()` when the filter has `fields()`; it wins over the guess.
 - A query with `GROUP BY`, `HAVING` or `UNION` is refused as `unpageable_query`.
-- The order of the query is ended with the model's key (`ExportValidator::orderByKey()`), so rows that tie on the host's sort neither repeat nor skip at a chunk boundary, and an unsorted query is no longer refused (`unpageable.no_order_by` is gone); a `SELECT DISTINCT` gets the key added to its select list when it does not select it (it only accepts an order over its selected columns).
+- The order of the query is ended with the model's key (`ExportValidator::orderByKey()`), so rows that tie on the host's sort neither repeat nor skip at a chunk boundary, and an unsorted query is no longer refused (`unpageable.no_order_by` is gone); a `SELECT DISTINCT` is left as the host wrote it (it only accepts an order over its selected columns).
 
 
 Breaking:

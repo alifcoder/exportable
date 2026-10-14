@@ -82,14 +82,12 @@ final class ExportValidator
      */
     public static function orderByKey(Builder $query): void
     {
-        $model = $query->getModel();
-
-        // A SELECT DISTINCT only accepts an order over its selected columns: the key is selected too (rows of one model
-        // are distinct by their key already, so the host's DISTINCT still decides which rows there are).
-        if ($query->getQuery()->distinct === true && ! self::selectsKey($query)) {
-            $query->addSelect($model->getQualifiedKeyName());
+        // A SELECT DISTINCT is used as the host wrote it: it only accepts an order over its selected columns.
+        if ($query->getQuery()->distinct !== false) {
+            return;
         }
 
+        $model = $query->getModel();
         $last = Arr::last((array) $query->getQuery()->orders);
         $column = is_array($last) ? ($last['column'] ?? null) : null;
 
@@ -98,27 +96,6 @@ final class ExportValidator
         }
 
         $query->orderBy($model->getQualifiedKeyName());
-    }
-
-    /**
-     * Whether the selected columns hold the model's key: no column list (`*`), `*`, `table.*` or the key itself.
-     *
-     * @param  Builder<*>  $query
-     */
-    private static function selectsKey(Builder $query): bool
-    {
-        $model = $query->getModel();
-        $columns = $query->getQuery()->columns;
-
-        if ($columns === null) {
-            return true;
-        }
-
-        return array_filter(
-            $columns,
-            fn (mixed $column): bool => is_string($column)
-                && in_array($column, ['*', $model->getTable().'.*', $model->getKeyName(), $model->getQualifiedKeyName()], true),
-        ) !== [];
     }
 
     /**
