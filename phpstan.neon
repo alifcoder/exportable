@@ -1,0 +1,12 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+    ignoreErrors:
+        # The trait is used by the host's filters, not inside this package.
+        -
+            identifier: trait.unused
+            path: src/Concerns/HandlesExport.php
