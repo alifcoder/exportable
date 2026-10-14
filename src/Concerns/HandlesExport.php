@@ -15,44 +15,17 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 
 /**
  * Makes a model filter exportable. It reads from the filter: `params()`, `query()`, `apply()` and the static
  * `$resource`. All validation of an export is {@see ExportValidator}'s and runs before anything is queued. The
  * service then only turns the validated {@see ExportDTO} into a task and queues the job. The
- * received query is only read. The trait's own members are `prepare`, `export`, `assertRelationsExist`, `exportResource`, `exportRules` and `assertParams`.
+ * received query is only read. The trait's own members are `export`, `assertRelationsExist`, `exportResource`, `exportRules` and `assertParams`.
  */
 trait HandlesExport
 {
-    /**
-     * Normalizes the parameters of an export, marked by `export` = true (`export()` sets it): the whole filtered set is
-     * exported (the job pages it itself), so `limit` and `offset` are removed, and the relations the request asks
-     * for (`with`) are added to the filter's own with `setWith()`. A relation sent in `with` is read by the resource
-     * through `whenLoaded()`; a column the resource does not yield stays `unknown_column`. Without the flag the filter's `prepare()` result is
-     * returned as it is, so a list keeps its `limit`.
-     *
-     * @param  array<string, mixed>  $parameters
-     * @return array<string, mixed>
-     */
-    protected function prepare(array $parameters): array
-    {
-        $parameters = parent::prepare($parameters);
-
-        if (! filter_var($parameters['export'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            return $parameters;
-        }
-
-        // Not null: the query filter rejects a null `limit`, an absent one means no page.
-        unset($parameters['limit'], $parameters['offset']);
-
-        $relations = $this->getWith();
-        $requested = array_values(array_filter((array) ($parameters['with'] ?? []), is_string(...)));
-        $this->setWith(array_merge($relations, array_values(array_diff($requested, $relations))));
-
-        return $parameters;
-    }
-
     /**
      * Validates the request, the query and the columns, then hands the service the validated export to queue; the file
      * is announced later by the `ExportFinished` event. Who may export is the host's decision, made before calling.
@@ -64,13 +37,15 @@ trait HandlesExport
         $parameters = $this->assertParams();
         $format = ExportFormatEnum::from($parameters['format']);
 
-        // A filter built from the same parameters plus `export` = true: its `prepare()` does the export's part, and the
-        // list's own filter is untouched.
-        $filter = new static([...$parameters, 'export' => true]);
+        // The whole filtered set is exported (the job pages it itself): a copy of the filter without `limit` and `offset`
+        // builds the query, so the list's own use of those parameters is untouched.
+        $filter = new static(Arr::except($parameters, ['limit', 'offset']));
         $query = $filter->query();
-        $filter->assertRelationsExist($query, (array) ($parameters['with'] ?? []));
-        // `prepare()` runs first, so the requested relations are in `getWith()` when the query is built.
-        $filter->prepare($filter->params());
+        $requested = array_values(array_filter((array) ($parameters['with'] ?? []), is_string(...)));
+        $filter->assertRelationsExist($query, $requested);
+        // The requested relations are added to the filter's own, so the resource reads them through `whenLoaded()`.
+        $own = $filter->getWith();
+        $filter->setWith(array_merge($own, array_values(array_diff($requested, $own))));
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
