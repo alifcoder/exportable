@@ -8,6 +8,7 @@ return [
     'unknown_column' => 'Noma\'lum ustun: ":column".',
     'invalid_request' => 'Eksport so\'rovi noto\'g\'ri.',
     'nested_too_deep' => 'Ro\'yxatlar ko\'pi bilan :max darajagacha ichma-ich bo\'lishi mumkin.',
+    'unknown_relation' => '":relation" bog\'lanishi mavjud emas.',
     'unpageable_query' => 'Eksport so\'rovini sahifalab bo\'lmaydi: :reason.',
     'unsupported_eager_load' => '":relation" eager load\'iga cheklov qo\'yilgan; eksport faqat oddiy eager load\'larni takrorlay oladi.',
     'resource_failed' => '":resource" resursi qatorni shakllantira olmadi: :reason',
