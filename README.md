@@ -16,7 +16,7 @@ Paging is by offset over the host's ORDER BY (the host ends it with the key, so 
 2. `php artisan vendor:publish --tag=export-config`, set **every** key in `config/export.php` (a missing one fails with `Missing export configuration "export.<key>"`).
 3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id). Links, listing and deletion are the host's. There is no auth contract and no gate/ability/guard setting.
 4. Use `Concerns\HandlesExport` in any `ModelFilter` (a filter with `params()`, `query()`, `apply()` and a static `$resource`). Nothing else is implemented:
-   - the query is `query()` with the filter applied; `limit` and `offset` of the request are dropped in `prepare()`. It needs an **ORDER BY** (the filter's sort; end it with the key so chunks never repeat or skip a row), otherwise `unpageable_query` (500) and nothing is queued;
+   - the query is `query()` with the filter applied; `export()` builds it from a copy of the filter without the request's `limit`, `offset`, `paginate`, `per_page` and `page`, so the list keeps using them. It needs an **ORDER BY** (the filter's sort; end it with the key so chunks never repeat or skip a row), otherwise `unpageable_query` (500) and nothing is queued; a query with a limit/offset, `GROUP BY`/`HAVING` or a `UNION` is refused the same way;
    - the resource is the filter's `static::$resource`.
 
    Eager loads follow the builder: the names in the query's `getEagerLoads()` are recorded in the task and the job loads them; a constrained eager load (a closure, or `relation:column`) cannot be repeated and fails with `unsupported_eager_load` (500). Write the endpoint, authorise the caller there, call `$filter->export()`, and listen to `ExportFinished`.
@@ -25,7 +25,7 @@ Paging is by offset over the host's ORDER BY (the host ends it with the key, so 
 7. The job runs without a request or a user, so the filter's resource must not depend on either to render a row.
 
 ## Request
-The list's own parameters plus two export parts, at the top level:
+The list's own parameters plus two export parts, at the top level (and optionally `with`, a list of relation names added to the filter's eager loads before the query is built; an unknown name is a 422 on `with`):
 ```json
 { "format": "excel",
   "columns": { "prefix-index": "Document Number", "outlet.name": "Outlet Name",
@@ -79,7 +79,7 @@ A cell is written as its column's `Alif\QueryFilter\Enums\FieldType`: the `type(
 Dates arriving as text are parsed and shown in the `app.timezone`. A value that does not fit its type (text in a number column, a number over 15 digits, an unparsable date) is written as exact text, never rounded or dropped.
 
 ## Internals
-One export is two steps, on the request and in the queued job; the whole filtered set is exported as one page: `prepare()` drops the request's `limit`/`offset`.
+One export is two steps, on the request and in the queued job; the whole filtered set is exported as one page: `export()` drops the request's `limit`/`offset`. With `short=1` the rows are rendered with the filter's `$shortResource` (when it has one), like the list.
 
 | Class | Step | What it does |
 |---|---|---|

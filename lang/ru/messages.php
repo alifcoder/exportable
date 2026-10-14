@@ -8,6 +8,7 @@ return [
     'unknown_column' => 'Неизвестная колонка: ":column".',
     'invalid_request' => 'Запрос на экспорт некорректен.',
     'nested_too_deep' => 'Вложенность списков не более :max уровней.',
+    'unknown_relation' => 'Связь ":relation" не существует.',
     'unpageable_query' => 'Запрос экспорта нельзя разбить на страницы: :reason.',
     'unsupported_eager_load' => 'Жадная загрузка ":relation" содержит ограничение; экспорт может повторить только простые жадные загрузки.',
     'resource_failed' => 'Ресурс ":resource" не смог сформировать строку: :reason',
@@ -20,6 +21,7 @@ return [
         'unsupported_driver' => 'Экспорт не может разбивать на страницы драйвер ":driver".',
     ],
     'unpageable' => [
+        'group_or_union' => 'в нём есть group или union',
         'limit_or_offset' => 'в нём есть limit или offset',
         'no_order_by' => 'в нём нет ORDER BY',
     ],
