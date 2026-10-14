@@ -24,13 +24,11 @@ use Illuminate\Validation\Rule;
  */
 trait HandlesExport
 {
-    /** True only while `export()` runs, so the list's own use of the filter is untouched. */
-    private bool $exporting = false;
-
     /**
-     * Normalizes the parameters of an export: the whole filtered set is exported (the job pages it itself), so `limit`
-     * and `offset` are dropped, and the relations the request asks for (`with`) are added to the filter's own with
-     * `setWith()`. A list request is passed through as the filter's `prepare()` returns it.
+     * Normalizes the parameters of an export, marked by `export` = true (`export()` sets it): the whole filtered set is
+     * exported (the job pages it itself), so `limit` and `offset` are removed, and the relations the request asks
+     * for (`with`) are added to the filter's own with `setWith()`. Without the flag the filter's `prepare()` result is
+     * returned as it is, so a list keeps its `limit`.
      *
      * @param  array<string, mixed>  $parameters
      * @return array<string, mixed>
@@ -39,10 +37,11 @@ trait HandlesExport
     {
         $parameters = parent::prepare($parameters);
 
-        if (! $this->exporting) {
+        if (! filter_var($parameters['export'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return $parameters;
         }
 
+        // Not null: the query filter rejects a null `limit`, an absent one means no page.
         unset($parameters['limit'], $parameters['offset']);
 
         $relations = $this->getWith();
@@ -63,17 +62,14 @@ trait HandlesExport
         $parameters = $this->assertParams();
         $format = ExportFormatEnum::from($parameters['format']);
 
-        $this->exporting = true;
-
-        try {
-            $query = $this->query();
-            $this->assertKnownRelations($query, (array) ($parameters['with'] ?? []));
-            // `prepare()` runs first, so the requested relations are in `getWith()` when the query is built.
-            $this->prepare($parameters);
-            $this->apply($query);
-        } finally {
-            $this->exporting = false;
-        }
+        // A filter built from the same parameters plus `export` = true: its `prepare()` does the export's part, and the
+        // list's own filter is untouched.
+        $filter = new static([...$parameters, 'export' => true]);
+        $query = $filter->query();
+        $filter->assertKnownRelations($query, (array) ($parameters['with'] ?? []));
+        // `prepare()` runs first, so the requested relations are in `getWith()` when the query is built.
+        $filter->prepare($filter->params());
+        $filter->apply($query);
 
         ExportValidator::assertPageable($query);
         $relations = ExportValidator::validateEagerLoads($query);
@@ -84,9 +80,9 @@ trait HandlesExport
 
         return app(ExportServiceInterface::class)->create(new ExportDTO(
             query: $query,
-            resource: $this->exportResource(),
+            resource: $filter->exportResource(),
             format: $format,
-            columns: ExportValidator::validateColumns($query, $this->exportResource(), $parameters['columns']),
+            columns: ExportValidator::validateColumns($query, $filter->exportResource(), $parameters['columns']),
             relations: $relations,
             totalRows: $count,
         ));
