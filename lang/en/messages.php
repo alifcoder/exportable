@@ -8,7 +8,6 @@ return [
     'unknown_column' => 'Unknown column ":column".',
     'invalid_request' => 'The export request is invalid.',
     'nested_too_deep' => 'Lists can be nested :max levels deep at most.',
-    'unknown_relation' => 'The relation ":relation" does not exist.',
     'unpageable_query' => 'The export query cannot be paged: :reason.',
     'unsupported_eager_load' => 'The eager load ":relation" is constrained; the export can only repeat plain eager loads.',
     'resource_failed' => 'The resource ":resource" failed to render a row: :reason',

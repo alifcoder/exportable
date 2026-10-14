@@ -11,10 +11,7 @@ use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportValidator;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -40,8 +37,6 @@ trait HandlesExport
         // `offset` builds the query, so the list's own use of those parameters is untouched.
         $filter = new static(Arr::except($parameters, ['limit', 'offset']));
         $query = $filter->query();
-        // The relations the request asks for (`with`) are added to the filter's own before it builds the query.
-        $filter->setWith($filter->exportWith($query, $parameters['with'] ?? []));
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
@@ -59,34 +54,6 @@ trait HandlesExport
             relations: $relations,
             totalRows: $count,
         ));
-    }
-
-    /**
-     * The filter's relations plus the requested `with` ones. A name the model has no relation method for is a 422 on
-     * `with`, so it never fails as a 500 while the query is built.
-     *
-     * @param  Builder<Model>  $query
-     * @param  list<string>  $requested
-     * @return array<int|string, mixed>
-     */
-    protected function exportWith(Builder $query, array $requested): array
-    {
-        $relations = $this->getWith();
-        $model = $query->getModel();
-
-        $unknown = array_values(array_filter(
-            $requested,
-            fn (string $name): bool => ! method_exists($model, Str::before($name, '.')),
-        ));
-
-        if ($unknown !== []) {
-            throw ExportException::invalidRequest(['with' => array_map(
-                fn (string $name): string => __('export::messages.unknown_relation', ['relation' => $name]),
-                $unknown,
-            )]);
-        }
-
-        return array_merge($relations, array_values(array_diff($requested, $relations)));
     }
 
     /** The resource the list renders its rows with: the short one for `short=1` when the filter has one. */
@@ -109,8 +76,6 @@ trait HandlesExport
         return [
             'format' => ['required', Rule::enum(ExportFormatEnum::class)],
             'columns' => ['required', 'array', 'min:1'],
-            'with' => ['sometimes', 'array'],
-            'with.*' => ['string'],
         ];
     }
 
