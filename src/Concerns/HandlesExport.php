@@ -41,8 +41,7 @@ trait HandlesExport
         // builds the query, so the list's own use of those parameters is untouched.
         $filter = new static(Arr::except($parameters, ['limit', 'offset']));
         $query = $filter->query();
-        $requested = array_values(array_filter((array) ($parameters['with'] ?? []), is_string(...)));
-        $filter->assertRelationsExist($query, $requested);
+        $filter->assertRelationsExist($query, $parameters['with'] ?? []);
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
@@ -63,24 +62,21 @@ trait HandlesExport
     }
 
     /**
-     * Every requested `with` name must be a relation of the model (dotted names: of each related model in turn), the
-     * way Eloquent resolves it when eager loading; any other name is a 422 on `with`, not a failure while loading.
+     * Every `with` name must be a relation of the model (dotted names: of each related model in turn), the way Eloquent
+     * resolves it when eager loading; any other name is a 422 on `with`, not a failure while loading.
      *
      * @param  Builder<Model>  $query
-     * @param  array<mixed>  $requested
+     * @param  list<string>  $with
      */
-    protected function assertRelationsExist(Builder $query, array $requested): void
+    protected function assertRelationsExist(Builder $query, array $with): void
     {
-        $unknown = [];
-
-        foreach ($requested as $name) {
-            if (is_string($name) && ! $this->isRelationPath($query, $name)) {
-                $unknown[] = __('export::messages.unknown_relation', ['relation' => $name]);
-            }
-        }
+        $unknown = array_filter($with, fn (string $name): bool => ! $this->isRelationPath($query, $name));
 
         if ($unknown !== []) {
-            throw ExportException::invalidRequest(['with' => $unknown]);
+            throw ExportException::invalidRequest(['with' => array_map(
+                fn (string $name): string => __('export::messages.unknown_relation', ['relation' => $name]),
+                array_values($unknown),
+            )]);
         }
     }
 
