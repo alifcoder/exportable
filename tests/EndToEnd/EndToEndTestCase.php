@@ -37,6 +37,8 @@ abstract class EndToEndTestCase extends Orchestra
 
     public static bool $storeFails = false;
 
+    private bool $connected = false;
+
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
@@ -71,6 +73,7 @@ abstract class EndToEndTestCase extends Orchestra
 
         try {
             $this->app['db']->connection()->getPdo();
+            $this->connected = true;
         } catch (Throwable $e) {
             $this->markTestSkipped('No PostgreSQL for the end-to-end tests: '.$e->getMessage());
         }
@@ -95,8 +98,10 @@ abstract class EndToEndTestCase extends Orchestra
 
     protected function tearDown(): void
     {
-        foreach (['e2e_serials', 'e2e_lines', 'e2e_orders', 'e2e_partners'] as $table) {
-            Schema::dropIfExists($table);
+        if ($this->connected) {
+            foreach (['e2e_serials', 'e2e_lines', 'e2e_orders', 'e2e_partners'] as $table) {
+                Schema::dropIfExists($table);
+            }
         }
 
         parent::tearDown();
