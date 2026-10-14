@@ -43,9 +43,6 @@ trait HandlesExport
         $query = $filter->query();
         $requested = array_values(array_filter((array) ($parameters['with'] ?? []), is_string(...)));
         $filter->assertRelationsExist($query, $requested);
-        // The requested relations are added to the filter's own, so the resource reads them through `whenLoaded()`.
-        $own = $filter->getWith();
-        $filter->setWith(array_merge($own, array_values(array_diff($requested, $own))));
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
