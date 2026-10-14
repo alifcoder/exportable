@@ -11,10 +11,6 @@ use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportValidator;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\RelationNotFoundException;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +18,7 @@ use Illuminate\Validation\Rule;
  * Makes a model filter exportable. It reads from the filter: `params()`, `query()`, `apply()` and the static
  * `$resource`. All validation of an export is {@see ExportValidator}'s and runs before anything is queued. The
  * service then only turns the validated {@see ExportDTO} into a task and queues the job. The
- * received query is only read. The trait's own members are `export`, `assertRelationsExist`, `exportResource`, `exportRules` and `assertParams`.
+ * received query is only read. The trait's own members are `export`, `exportResource`, `exportRules` and `assertParams`.
  */
 trait HandlesExport
 {
@@ -41,7 +37,6 @@ trait HandlesExport
         // builds the query, so the list's own use of those parameters is untouched.
         $filter = new static(Arr::except($parameters, ['limit', 'offset']));
         $query = $filter->query();
-        $filter->assertRelationsExist($query, $parameters['with'] ?? []);
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
@@ -59,45 +54,6 @@ trait HandlesExport
             relations: $relations,
             totalRows: $count,
         ));
-    }
-
-    /**
-     * Every `with` name must be a relation of the model (dotted names: of each related model in turn), the way Eloquent
-     * resolves it when eager loading; any other name is a 422 on `with`, not a failure while loading.
-     *
-     * @param  Builder<Model>  $query
-     * @param  list<string>  $with
-     */
-    protected function assertRelationsExist(Builder $query, array $with): void
-    {
-        $unknown = array_filter($with, fn (string $name): bool => ! $this->isRelationPath($query, $name));
-
-        if ($unknown !== []) {
-            throw ExportException::invalidRequest(['with' => array_map(
-                fn (string $name): string => __('export::messages.unknown_relation', ['relation' => $name]),
-                array_values($unknown),
-            )]);
-        }
-    }
-
-    /** @param  Builder<Model>  $query */
-    private function isRelationPath(Builder $query, string $path): bool
-    {
-        foreach (explode('.', $path) as $segment) {
-            try {
-                $relation = $query->getRelation($segment);
-            } catch (RelationNotFoundException) {
-                return false;
-            }
-
-            if (! $relation instanceof Relation) {
-                return false;
-            }
-
-            $query = $relation->getRelated()->newQuery();
-        }
-
-        return true;
     }
 
     /** The resource the list renders its rows with: the short one for `short=1` when the filter has one. */
@@ -120,8 +76,6 @@ trait HandlesExport
         return [
             'format' => ['required', Rule::enum(ExportFormatEnum::class)],
             'columns' => ['required', 'array', 'min:1'],
-            'with' => ['sometimes', 'array'],
-            'with.*' => ['string'],
         ];
     }
 
