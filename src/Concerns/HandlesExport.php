@@ -11,8 +11,6 @@ use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportValidator;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -20,7 +18,7 @@ use Illuminate\Validation\Rule;
  * Makes a model filter exportable. It reads from the filter: `params()`, `query()`, `apply()` and the static
  * `$resource`. All validation of an export is {@see ExportValidator}'s and runs before anything is queued. The
  * service then only turns the validated {@see ExportDTO} into a task and queues the job. The
- * received query is only read. The trait's own members are `prepare`, `export`, `assertKnownRelations`, `exportResource`, `exportRules` and `assertParams`.
+ * received query is only read. The trait's own members are `prepare`, `export`, `assertWithMatchesColumns`, `exportResource`, `exportRules` and `assertParams`.
  */
 trait HandlesExport
 {
@@ -66,7 +64,7 @@ trait HandlesExport
         // list's own filter is untouched.
         $filter = new static([...$parameters, 'export' => true]);
         $query = $filter->query();
-        $filter->assertKnownRelations($query, (array) ($parameters['with'] ?? []));
+        $filter->assertWithMatchesColumns((array) ($parameters['with'] ?? []), $parameters['columns']);
         // `prepare()` runs first, so the requested relations are in `getWith()` when the query is built.
         $filter->prepare($filter->params());
         $filter->apply($query);
@@ -89,27 +87,57 @@ trait HandlesExport
     }
 
     /**
-     * A requested `with` name the model has no relation method for is a 422 on `with`, so it never fails as a 500
-     * while the query is built.
+     * A relation the filter does not load by itself is asked for in `with` and read back in `columns`: every `with`
+     * name must be a path the requested columns lead through (`business_partner` for `business_partner.name`; a list
+     * key such as `products` for `products.*`), written the same or in snake case. A name no column uses is a 422 on
+     * `with`.
      *
-     * @param  Builder<Model>  $query
      * @param  array<mixed>  $requested
+     * @param  array<string, mixed>  $columns
      */
-    protected function assertKnownRelations(Builder $query, array $requested): void
+    protected function assertWithMatchesColumns(array $requested, array $columns): void
     {
-        $model = $query->getModel();
+        $paths = $this->columnPaths($columns);
 
-        $unknown = array_values(array_filter(
+        $unmatched = array_values(array_filter(
             $requested,
-            fn (mixed $name): bool => is_string($name) && ! method_exists($model, Str::before($name, '.')),
+            fn (mixed $name): bool => is_string($name)
+                && ! isset($paths[$name])
+                && ! isset($paths[implode('.', array_map(Str::snake(...), explode('.', $name)))]),
         ));
 
-        if ($unknown !== []) {
+        if ($unmatched !== []) {
             throw ExportException::invalidRequest(['with' => array_map(
                 fn (string $name): string => __('export::messages.unknown_relation', ['relation' => $name]),
-                $unknown,
+                $unmatched,
             )]);
         }
+    }
+
+    /**
+     * Every dotted path the columns lead through, as keys: `products.product.name` gives `products`,
+     * `products.product` and `products.product.name`. A list's own column map continues the list's path.
+     *
+     * @param  array<string, mixed>  $columns
+     * @return array<string, true>
+     */
+    private function columnPaths(array $columns, string $prefix = ''): array
+    {
+        $paths = [];
+
+        foreach ($columns as $key => $heading) {
+            $path = $prefix.$key;
+
+            foreach (explode('.', $path) as $i => $segment) {
+                $paths[implode('.', array_slice(explode('.', $path), 0, $i + 1))] = true;
+            }
+
+            if (is_array($heading)) {
+                $paths += $this->columnPaths($heading, $path.'.');
+            }
+        }
+
+        return $paths;
     }
 
     /** The resource the list renders its rows with: the short one for `short=1` when the filter has one. */
