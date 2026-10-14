@@ -37,9 +37,9 @@ trait HandlesExport
         $parameters = $this->assertParams();
         $format = ExportFormatEnum::from($parameters['format']);
 
-        // The whole filtered set is exported (the job pages it itself): a copy of the filter without `limit` and `offset`
+        // The whole filtered set is exported (the job pages it itself): a copy of the filter without the page parameters
         // builds the query, so the list's own use of those parameters is untouched.
-        $filter = new static(Arr::except($parameters, ['limit', 'offset']));
+        $filter = new static(Arr::except($parameters, ['limit', 'offset', 'paginate', 'per_page', 'page']));
         $query = $filter->query();
         $filter->assertRelationsExist($query, $parameters['with'] ?? []);
         $filter->apply($query);

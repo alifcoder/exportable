@@ -21,6 +21,7 @@ return [
         'unsupported_driver' => 'Экспорт не может разбивать на страницы драйвер ":driver".',
     ],
     'unpageable' => [
+        'group_or_union' => 'в нём есть group или union',
         'limit_or_offset' => 'в нём есть limit или offset',
         'no_order_by' => 'в нём нет ORDER BY',
     ],

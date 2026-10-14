@@ -21,6 +21,7 @@ return [
         'unsupported_driver' => 'Export cannot page the ":driver" driver.',
     ],
     'unpageable' => [
+        'group_or_union' => 'it groups or unions rows',
         'limit_or_offset' => 'it has a limit or offset',
         'no_order_by' => 'it has no ORDER BY',
     ],

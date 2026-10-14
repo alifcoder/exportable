@@ -21,6 +21,7 @@ return [
         'unsupported_driver' => 'Eksport ":driver" drayverini sahifalay olmaydi.',
     ],
     'unpageable' => [
+        'group_or_union' => 'unda group yoki union bor',
         'limit_or_offset' => 'unda limit yoki offset bor',
         'no_order_by' => 'unda ORDER BY yo\'q',
     ],

@@ -51,7 +51,7 @@ final class ExportValidator
     }
 
     /**
-     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and the chunks
+     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page or group or union, and the chunks
      * only follow each other without repeats or gaps when the query has an ORDER BY. The host prepares both.
      *
      * @param  Builder<*>  $query
@@ -64,6 +64,10 @@ final class ExportValidator
 
         if ($base->limit !== null || $base->offset !== null) {
             throw ExportException::unpageableQuery('limit_or_offset');
+        }
+
+        if ($base->groups !== null || $base->havings !== null || $base->unions !== null) {
+            throw ExportException::unpageableQuery('group_or_union');
         }
 
         if (empty($base->orders)) {
