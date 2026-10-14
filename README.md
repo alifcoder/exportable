@@ -25,7 +25,7 @@ Paging is by offset over the host's ORDER BY (the host ends it with the key, so 
 7. The job runs without a request or a user, so the filter's resource must not depend on either to render a row.
 
 ## Request
-The list's own parameters plus two export parts, at the top level:
+The list's own parameters plus two export parts, at the top level (and optionally `with`, a list of relation names added to the filter's eager loads before the query is built; an unknown name is a 422 on `with`):
 ```json
 { "format": "excel",
   "columns": { "prefix-index": "Document Number", "outlet.name": "Outlet Name",
