@@ -34,9 +34,11 @@ The list's own parameters plus two export parts, at the top level (and optionall
   "filter": {}, "sort": "-document_date", "search": "abc" }
 ```
 - `format`: `csv` or `excel` (a `.xlsx` file).
+- `with` (optional): relation names (dotted for nested ones) the client wants loaded for a column the list does not load by itself. Each must be a relation of the model, else `invalid_request` (422) on `with`. The package only checks them; adding them to the filter (`setWith()`) is the host's, before it applies the filter.
+- `limit`, `offset`, `paginate`, `per_page` and `page` are ignored: the whole filtered set is exported.
 - `columns`: resource key (dotted for nested objects) => heading. A list the resource renders (`products`) takes its own `key => heading` map, the keys read from each item; it may hold further lists (`serials`), up to 5 levels, and any number of sibling lists.  The stored file is named `<task id>.<ext>`; the client chooses the download name.
 
-A column whose last segment ends in `_id` (`business_partner_id`, `address.region_id`, `lines.focus_product_id`) is never exported, even when the filter offers it: use a dotted field of the related record (`business_partner.name`). `id` is allowed.
+A column is exported whenever the resource yields it (a foreign key such as `business_partner_id` too); only a document column or list the resource does not yield is refused.
 
 Every failure of `export()` is an `ExportException` (`errorCode`, `status`, `errors`, `isClientError()`); the package defines no `render()`. A 422 carries `errors` keyed by request field, a 500 is a set-up or runtime failure:
 
@@ -83,7 +85,7 @@ One export is two steps, on the request and in the queued job; the whole filtere
 
 | Class | Step | What it does |
 |---|---|---|
-| `Concerns\HandlesExport` | request | all validation, before anything is queued: `format`/`columns`; the query (limit/offset, ORDER BY, plain eager loads, one count for progress total, empty and cap checks); `columns` (flattens them in order, refuses `*_id`, limits list depth, wants a document column, renders a sample of rows through the resource, refuses a document column it does not yield — list item columns are tried, empty when missing — and types each cell with `Helpers\CellType::guess()`) |
+| `Concerns\HandlesExport` | request | all validation, before anything is queued: `format`/`columns`; the query (limit/offset, ORDER BY, plain eager loads, one count for progress total, empty and cap checks); `columns` (flattens them in order, limits list depth, wants a document column, renders a sample of rows through the resource, refuses a document column it does not yield — list item columns are tried, empty when missing — and types each cell with `Helpers\CellType::guess()`) |
 | `Services\ExportService` | request | turns the validated `ExportDTO` into an `ExportTask` (the query compiled to SQL + bindings) and queues `RunExport` |
 | `Helpers\ResourceRows` | both | reads a model through its resource into dotted keys (`partner.name`) and lists (`products`) |
 | `Helpers\DocumentReader` | job | reads the prepared SQL `chunk_size` rows at a time and turns each document into `Line`s (own line, then heading and item lines of each list) |
@@ -110,6 +112,10 @@ Rules: the document needs at least one column of its own; relations of list item
 Counts: the request-time cap, empty check and progress total count documents. The cap is enforced again on written rows (sub rows and their heading rows included) while writing: a file pushed over it fails with `row_limit_exceeded`. `ExportProgressed.rows` counts documents; `ExportFinished.rows` counts written rows. xlsx grouping rewrites the sheet's row tags after writing, so large files take a few seconds longer.
 
 ## Layout and safety
+- A text longer than Excel's cell limit (32,767 characters) is cut there in xlsx, and the characters XML does not allow (U+FFFE, U+FFFF) are dropped, so one value never fails or corrupts the file. csv keeps the text as it is.
+- A column's cell type is the `FieldType` of the filter's field of the same name (`Field::type()`, read from the filter's `fields()` when it has one), else the type guessed from the values.
+- A query with `GROUP BY`, `HAVING` or `UNION` is refused as `unpageable_query`: the job pages by `limit`/`offset`, which is not stable over them.
+- Query bindings are saved as the connection sends them (dates as text in the app's wall clock time), so the queued payload means the same after any queue driver stores it, JSON included.
 - Caps count output rows. csv: formula-prefix guard on non-numeric columns; layout (delimiter, enclosure, line ending, BOM) from `style.csv`. xlsx: non-numeric cells are inert strings.
 - Lazy loading is guarded best-effort while exporting (also while the column sample is rendered): the relations the resource touches must be eager loaded by the filter (`$with`), plain (no constraint). The package arms every row it hydrates, and Eloquent arms related models loaded in sets of more than one; a related model loaded alone (a single to-one relation) is not guarded, so a missing eager load there is a silent extra query, not an error. A resource that throws fails with `resource_failed` (500, reported).
 
@@ -123,4 +129,6 @@ Measured earlier (Postgres 16): csv 500k rows in 54s at 48MB peak, xlsx 500k row
 ```
 composer check      # pint --test, phpstan (level 5)
 vendor/bin/pint     # fix style
+vendor/bin/phpunit  # unit tests, and the end-to-end tests when a PostgreSQL answers
 ```
+The end-to-end tests (`tests/EndToEnd`) write real csv and xlsx files on PostgreSQL through a synchronous queue and read them back. They use `EXPORT_TEST_PGSQL_HOST` / `_PORT` / `_DATABASE` / `_USERNAME` / `_PASSWORD` (defaults `127.0.0.1`, `54329`, `export_test`, `postgres`, empty) and are skipped when no database answers. `EXPORT_TEST_BIG=1` adds the 100k-row runs (about 6 s csv, 13 s xlsx, under 60 MB).

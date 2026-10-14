@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+Fixed:
+
+- A text over 32,767 characters no longer fails an xlsx export with `export_failed`: it is cut at Excel's limit.
+- U+FFFE and U+FFFF in a value are dropped from xlsx text: they made the file corrupt for Excel.
+- A float over 15 digits is written as its exact text (`1.2345678901234567E+19`), not rounded to 14 digits.
+- Query bindings are saved as scalars (`Connection::prepareBindings()`): a date binding changed its meaning when a queue driver stored the payload as JSON.
+- `limit`, `offset`, `paginate`, `per_page` and `page` are dropped only inside `export()` (from a copy of the filter): the trait no longer overrides `prepare()`, so a list keeps its `limit`.
+- `short=1` exports render the filter's `$shortResource`, like the list.
+
+Added:
+
+- `with` (relation names): each must be a relation of the model, else a 422 on `with`.
+- A column's cell type is read from the filter's `Field::type()` when the filter has `fields()`; it wins over the guess.
+- A query with `GROUP BY`, `HAVING` or `UNION` is refused as `unpageable_query`.
+- End-to-end tests on PostgreSQL (csv and xlsx written and read back, chunking, failures, progress), run in CI.
+
+
 Breaking:
 
 - All validation lives in `Helpers\ExportValidator` (called by `Concerns\HandlesExport`): request, query and column checks. A column the sample does not show is looked for in chunks of 50 rows, up to 500. A list of scalars is one joined cell; a non-scalar value is written empty. `Helpers\ExportQuery` and `Helpers\ColumnResolver` are removed. `Services\ExportService` only compiles the query, creates the task and queues the job. `DTO\Export\ExportDTO` is now the validated export: `(query, resource, format, list<ExportColumn> columns, relations, totalRows)`; `ExportCreateDTO::from()` takes it alone.

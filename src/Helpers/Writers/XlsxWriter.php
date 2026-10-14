@@ -25,6 +25,9 @@ use OpenSpout\Writer\XLSX\Writer as SpoutWriter;
  */
 final class XlsxWriter implements Writer
 {
+    /** The most characters Excel keeps in one cell. */
+    private const int MAX_CELL_CHARACTERS = 32767;
+
     public function __construct(private readonly ExportStyle $style = new ExportStyle) {}
 
     /** Writes the headings and all lines to the xlsx file, then lets `XlsxPackage` finish it. */
@@ -163,7 +166,7 @@ final class XlsxWriter implements Writer
                 FieldType::Integer, FieldType::Decimal => new NumericCell($cell->value, $style),
                 FieldType::Date, FieldType::DateTime, FieldType::Time => new DateTimeCell($cell->value->toDateTimeImmutable(), $style),
                 FieldType::Boolean => new StringCell($this->style->booleanLabel($cell->value), $style),
-                default => new StringCell($cell->value, $style),
+                default => new StringCell($this->fitInCell((string) $cell->value), $style),
             };
 
             $at = $line->depth + $i;
@@ -171,6 +174,15 @@ final class XlsxWriter implements Writer
         }
 
         return $cells;
+    }
+
+    /** A cell holds at most 32,767 characters; a longer text is cut there instead of failing the whole file. */
+    private function fitInCell(string $text): string
+    {
+        // U+FFFE and U+FFFF are not allowed in XML: one of them makes Excel report the whole file as corrupt.
+        $text = str_replace(["\u{FFFE}", "\u{FFFF}"], '', $text);
+
+        return mb_strlen($text) > self::MAX_CELL_CHARACTERS ? mb_substr($text, 0, self::MAX_CELL_CHARACTERS) : $text;
     }
 
     /** How many characters the cell shows: the text, a number with its separators and decimals, a date by its format. */

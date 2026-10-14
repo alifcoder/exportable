@@ -37,7 +37,9 @@ final readonly class PreparedQuery
         // A clone, so compiling never changes the received builder; compiled exactly as given.
         $base = (clone $builder)->toBase();
 
-        return new self($builder->getModel()->getConnectionName(), $base->toSql(), $base->getBindings());
+        // As the connection sends them (dates as text in the app's wall clock time, booleans as numbers): scalars only,
+        // so the payload means the same after any queue driver stores it, JSON included.
+        return new self($builder->getModel()->getConnectionName(), $base->toSql(), $connection->prepareBindings($base->getBindings()));
     }
 
     /**

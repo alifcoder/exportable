@@ -41,22 +41,6 @@ final class ColumnValidationTest extends TestCase
         $this->assertSame('true, false', $read['values']['flags']);
     }
 
-    public function test_a_foreign_key_column_is_refused_before_any_row_is_read(): void
-    {
-        try {
-            ExportValidator::validateColumns(
-                Doc::query()->orderBy('id'),
-                TaggedResource::class,
-                ['number' => 'No', 'owner_id' => 'Owner', 'lines' => ['address.region_id' => 'Region']],
-            );
-            $this->fail('A column ending in _id must be refused.');
-        } catch (ExportException $e) {
-            $this->assertSame('unknown_column', $e->errorCode);
-            $this->assertCount(2, $e->errors['columns']);
-            $this->assertSame(0, TaggedResource::$renders);
-        }
-    }
-
     public function test_a_field_only_later_rows_yield_is_found(): void
     {
         $query = Doc::query()->orderBy('id');
