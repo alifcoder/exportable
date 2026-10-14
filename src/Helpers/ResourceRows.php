@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alif\Export\Helpers;
 
 use Alif\Export\Exceptions\ExportException;
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Throwable;
@@ -41,13 +42,37 @@ final class ResourceRows
      */
     public function layout(iterable $rows, Model $blank): array
     {
-        $layout = ['values' => [], 'lists' => []];
+        return $this->layoutUntil([[...$rows]], $blank, fn (): bool => true);
+    }
 
-        foreach ([...$rows, $blank] as $row) {
-            $layout = $this->absorb($layout, $this->split($this->payload($row, ! $row->exists)));
+    /**
+     * Like {@see layout()}, but the rows come in batches and reading stops after the first batch that satisfies
+     * `$satisfied`, so no more rows are rendered than needed.
+     *
+     * @param  iterable<iterable<Model>>  $batches
+     * @param  Closure(array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}): bool  $satisfied  Given the layout so far.
+     * @return array{values: array<string, scalar|null>, lists: array<string, array<string, mixed>>}
+     */
+    public function layoutUntil(iterable $batches, Model $blank, Closure $satisfied): array
+    {
+        // The blank model is applied last at every step: its values never shadow a real row's.
+        $blankRead = $this->split($this->payload($blank, true));
+        $seen = ['values' => [], 'lists' => []];
+        $layout = $this->unshadowed($this->absorb($seen, $blankRead));
+
+        foreach ($batches as $batch) {
+            foreach ($batch as $row) {
+                $seen = $this->absorb($seen, $this->split($this->payload($row, false)));
+            }
+
+            $layout = $this->unshadowed($this->absorb($seen, $blankRead));
+
+            if ($satisfied($layout)) {
+                break;
+            }
         }
 
-        return $this->unshadowed($layout);
+        return $layout;
     }
 
     /**
@@ -118,7 +143,7 @@ final class ResourceRows
 
     /**
      * Objects recurse into dotted keys. A list of objects (or an empty list) is collected into `$lists` under its
-     * dotted key, each item split the same way; a list of scalars is dropped.
+     * dotted key, each item split the same way; a list of scalars is one value, its items joined with ", ".
      *
      * @param  array<string, mixed>  $data
      * @param  array<string, list<array<string, mixed>>>  $lists
@@ -134,6 +159,8 @@ final class ResourceRows
             if (is_array($value)) {
                 if (! array_is_list($value)) {
                     $flat += $this->flatten($value, $path.'.', $lists);
+                } elseif ($value !== [] && array_filter($value, is_array(...)) === []) {
+                    $flat[$path] = $this->joined($value);
                 } elseif (array_filter($value, fn (mixed $item): bool => ! is_array($item) || array_is_list($item)) === []) {
                     $lists[$path] = array_map($this->split(...), $value);
                 }
@@ -145,6 +172,19 @@ final class ResourceRows
         }
 
         return $flat;
+    }
+
+    /**
+     * A list of scalars as one cell value; nulls are skipped, booleans read `true` and `false`.
+     *
+     * @param  list<scalar|null>  $items
+     */
+    private function joined(array $items): string
+    {
+        return implode(', ', array_map(
+            fn (mixed $item): string => is_bool($item) ? ($item ? 'true' : 'false') : (string) $item,
+            array_filter($items, fn (mixed $item): bool => $item !== null),
+        ));
     }
 
     /**

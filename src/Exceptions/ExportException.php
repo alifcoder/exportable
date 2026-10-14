@@ -45,30 +45,12 @@ final class ExportException extends RuntimeException
         return new self(__('export::messages.invalid_request'), 'invalid_request', 422, $errors);
     }
 
-    /** Every requested column belongs to a list. */
-    public static function needsDocumentColumn(): self
-    {
-        $message = __('export::messages.needs_document_column');
-
-        return new self($message, 'needs_document_column', 422, ['columns' => [$message]]);
-    }
-
     /** Lists are nested deeper than allowed. */
     public static function nestedTooDeep(int $max): self
     {
         $message = __('export::messages.nested_too_deep', ['max' => $max]);
 
         return new self($message, 'nested_too_deep', 422, ['columns' => [$message]]);
-    }
-
-    /**
-     * Columns the filter does not offer or does not let out, all reported together.
-     *
-     * @param  list<string>  $messages  One translated message per refused column or list.
-     */
-    public static function columnsRefused(array $messages): self
-    {
-        return new self($messages[0] ?? __('export::messages.invalid_request'), 'columns_refused', 422, ['columns' => $messages]);
     }
 
     /**
@@ -139,11 +121,5 @@ final class ExportException extends RuntimeException
     public static function invalidConfiguration(string $key): self
     {
         return new self(sprintf('Missing export configuration "export.%s".', $key), 'invalid_configuration');
-    }
-
-    /** A column gave an array or an object, but a cell can hold only a simple value. */
-    public static function invalidColumnValue(string $key): self
-    {
-        return new self(sprintf('Column "%s" produced a non-scalar value.', $key), 'invalid_column_value');
     }
 }

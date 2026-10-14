@@ -11,6 +11,8 @@ class Doc extends Model
 {
     protected $table = 'docs';
 
+    protected $guarded = [];
+
     /** @return HasMany<Doc, $this> */
     public function lines(): HasMany
     {

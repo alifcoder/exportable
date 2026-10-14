@@ -4,6 +4,8 @@
 
 Breaking:
 
+- All validation lives in `Helpers\ExportValidator` (called by `Concerns\HandlesExport`): request, query and column checks. A column the sample does not show is looked for in chunks of 50 rows, up to 500. A list of scalars is one joined cell; a non-scalar value is written empty. `Helpers\ExportQuery` and `Helpers\ColumnResolver` are removed. `Services\ExportService` only compiles the query, creates the task and queues the job. `DTO\Export\ExportDTO` is now the validated export: `(query, resource, format, list<ExportColumn> columns, relations, totalRows)`; `ExportCreateDTO::from()` takes it alone.
+- The config key `ttl_hours` is removed: nothing read it (the package keeps no files); the host owns file lifetime.
 - `Enums\ColumnTypeEnum` is removed: columns are typed with `Alif\QueryFilter\Enums\FieldType` (`ExportColumn::$type`, payload value unchanged for String/Integer/Decimal/Boolean/Date/DateTime/Time; `Uuid` is written as text). `Percent`, `Currency` and `Number` are dropped (nothing sets them; a value-guessed numeric column is `Integer` for an int and `Decimal` for a float or numeric string). The config keys `style.xlsx.percent_format` and `style.xlsx.currency_format` are no longer read (remove them); `ExportStyle::percentFormat()`/`currencyFormat()` are gone. The guess moved to `Helpers\CellType::guess()`. Queued payloads with a `percent`, `currency` or `number` column type fail on read: drain the queue.
 - The package no longer rebuilds or re-applies the filter. `HandlesExport` takes `query()` with the filter `apply()`ed and the filter's static `$resource`, drops the request's `limit`/`offset` in `prepare()` and hands them over; the host implements no hook (`exportQuery()`, `exportResource()`, `exportLists()`, `Contracts\ExportableFilter` and `Contracts\ExportSource` do not exist). `Helpers\ExportQuery::wholeSet()` is removed: the package never clears limit/offset, adds ORDER BY or strips eager loads, and never changes the received builder.
 - `ExportDTO` is `(Builder $query, class-string $resource, format, array $columns)`; `columns` is the request's `key => heading` / `list => {...}` array as sent. `ExportCreateDTO::$source` is gone.
@@ -11,8 +13,8 @@ Breaking:
 - Eager loads follow the builder: the job loads `array_keys($builder->getEagerLoads())` (`ExportQuery::eagerLoads()`); a constrained eager load fails with `unsupported_eager_load`.
 - A query with a limit/offset or no ORDER BY is refused with `unpageable_query` (500) before anything is queued.
 - Columns are validated in one place, `Helpers\ColumnResolver`, against the resource only, never against the filter's `fields()`: a document column or a list the resource does not yield is `unknown_column`; a list item column of a list with no sampled items is accepted untyped, and an item that does not yield it gets an empty cell.
-- Every failure of `export()` is an `ExportException` with `errorCode`, `status` (422/500), `errors` and `isClientError()`; the `ValidationException`s are gone. A 422 has `errors.columns`/`errors.format`. New codes: `invalid_request`, `needs_document_column`, `nested_too_deep`, `columns_refused`, `unknown_column`, `no_data`, `too_many_rows`, `unpageable_query`, `unsupported_eager_load`, `resource_failed`.
-- Columns ending in `_id` (last dotted segment) are refused (`columns_refused`, `column_not_exportable`); `id` is allowed.
+- Every failure of `export()` is an `ExportException` with `errorCode`, `status` (422/500), `errors` and `isClientError()`; the `ValidationException`s are gone. A 422 has `errors.columns`/`errors.format`. New codes: `invalid_request`, `nested_too_deep`, `unknown_column`, `no_data`, `too_many_rows`, `unpageable_query`, `unsupported_eager_load`, `resource_failed`.
+- A column is accepted whenever the resource yields it: no `*_id` rule, and a request may have only list columns.
 - Queue payload: `ExportCreateDTO` carries `rows` and `ExportColumn` keeps its `type`. Drain the export queue before deploying; a payload without `rows` fails with `invalid_registration`.
 - Requires `alifcoder/query-filter` `^2.0.2`.
 
@@ -25,7 +27,7 @@ Fixed:
 
 Added:
 
-- Messages `column_not_exportable`, `invalid_request` and an `errors.<code>` text for every code (uz, ru, en).
+- Messages `invalid_request` and an `errors.<code>` text for every code (uz, ru, en).
 - List columns: `columns` may hold `list => {key => heading}` (e.g. `products`), nested to 5 levels and as many sibling lists as wanted. They are written as sub rows below their document row; in xlsx as a collapsed Excel outline (`+` opens them), in csv indented by depth. `ExportColumn` gains `groups`, `Writers\Line` and `Helpers\ColumnNode` are new.
 
 Changed:

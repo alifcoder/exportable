@@ -7,9 +7,6 @@ declare(strict_types=1);
  * "Missing export configuration". Publish this file and set the values.
  */
 return [
-    // Hours a finished export stays downloadable.
-    'ttl_hours' => 3,
-
     // Documents loaded per query while writing.
     'chunk_size' => 500,
 

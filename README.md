@@ -43,19 +43,17 @@ Every failure of `export()` is an `ExportException` (`errorCode`, `status`, `err
 | `errorCode` | status | `errors` key |
 |---|---|---|
 | `invalid_request` (`format`/`columns` missing or invalid) | 422 | the invalid fields |
-| `needs_document_column`, `nested_too_deep` | 422 | `columns` |
-| `columns_refused` (column/list not offered, `*_id` column; all reported together) | 422 | `columns` |
+| `nested_too_deep` | 422 | `columns` |
 | `unknown_column` (the resource does not yield a document column) | 422 | `columns` |
 | `no_data` | 422 | `columns` |
 | `too_many_rows` | 422 | `format` |
 | `unpageable_query`, `unsupported_eager_load`, `resource_failed`, `invalid_registration`, `invalid_configuration` | 500 | none |
 
-Columns are kept in the order the client sent them (document columns, then each list's, to any depth). Everything is checked against the resource, nothing against the filter's `fields()`: a document column or a list the resource does not yield is `unknown_column`; a column ending in `_id` is `column_not_exportable`; a list item column is tried on the resource and an item that does not yield it gets an empty cell, in the request check and in the job alike. A list that is empty in every sampled document shows no keys, so its columns are accepted. A value that is not plain (array, object) fails the job with `invalid_column_value`. The cell type is guessed from the sampled values; an empty-only column has no guessed type and is written as empty text.
+Columns are kept in the order the client sent them (document columns, then each list's, to any depth). Everything is checked against the resource, nothing against the filter's `fields()`: a document column or a list the resource does not yield is `unknown_column`; a list item column is tried on the resource and an item that does not yield it gets an empty cell, in the request check and in the job alike. A list that is empty in every sampled document shows no keys, so its columns are accepted. A list of scalars is one cell, its items joined with ", "; a value that is not plain (array, object) is written empty. A field the resource yields only for some rows is looked for in chunks of 50 rows (up to 500) before the column is refused. The cell type is guessed from the sampled values; an empty-only column has no guessed type and is written as empty text.
 
 ## Config (all required)
 | Key | Meaning |
 |---|---|
-| `ttl_hours` | hours a finished export stays downloadable |
 | `chunk_size`, `max_rows.{csv,xlsx}` | paging, caps |
 | `queue.{connection,name,timeout}` | `connection`/`name` may be `null` but must be present |
 | `stale_margin_seconds` | the "finished" announcement of an export is remembered `queue.timeout` + this many seconds, so it is sent once |
@@ -85,10 +83,8 @@ One export is two steps, on the request and in the queued job; the whole filtere
 
 | Class | Step | What it does |
 |---|---|---|
-| `Services\ExportService` | request | runs the steps below in order and queues `RunExport` |
-| `Helpers\ColumnResolver` | request | the one place that validates `columns`: flattens them in order, refuses `*_id`, limits list depth, wants a document column, checks every column and list against the resource, types the cells |
-| `Helpers\ExportQuery` | request | refuses a query with a limit/offset or without ORDER BY; counts it (on clones); refuses an empty result or one over the format's cap |
-| `Helpers\ColumnResolver` | request | renders a sample of rows through the resource, refuses a document column the resource does not yield (list item columns are tried, empty when missing), gives each column its type (`Helpers\CellType::guess()`) |
+| `Concerns\HandlesExport` | request | all validation, before anything is queued: `format`/`columns`; the query (limit/offset, ORDER BY, plain eager loads, one count for progress total, empty and cap checks); `columns` (flattens them in order, refuses `*_id`, limits list depth, wants a document column, renders a sample of rows through the resource, refuses a document column it does not yield — list item columns are tried, empty when missing — and types each cell with `Helpers\CellType::guess()`) |
+| `Services\ExportService` | request | turns the validated `ExportDTO` into an `ExportTask` (the query compiled to SQL + bindings) and queues `RunExport` |
 | `Helpers\ResourceRows` | both | reads a model through its resource into dotted keys (`partner.name`) and lists (`products`) |
 | `Helpers\DocumentReader` | job | reads the prepared SQL `chunk_size` rows at a time and turns each document into `Line`s (own line, then heading and item lines of each list) |
 | `Helpers\ColumnNode` | job | the requested columns as a tree (document, lists, lists in lists): headings, types, widths |
@@ -97,7 +93,7 @@ One export is two steps, on the request and in the queued job; the whole filtere
 | `Helpers\ExportConfig` | both | reads `config/export.php`; a missing key is an error, the package has no defaults |
 
 ## Messages
-The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `column_not_exportable`, `needs_document_column`, `nested_too_deep`, `invalid_request`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). The package sets no locale: messages use the locale of the request, and job-time texts the worker's default. Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
+The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): the 422 messages of the request (`no_data`, `too_many_rows`, `unknown_column`, `nested_too_deep`, `invalid_request`) and one text per `errorCode` of a failed `ExportFinished` (`export::messages.errors.<code>`), which the host can show to the person who asked (the package itself only reports the code). The package sets no locale: messages use the locale of the request, and job-time texts the worker's default. Override or add a language by publishing them (`php artisan vendor:publish --tag=export-lang`) to `lang/vendor/export`.
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.

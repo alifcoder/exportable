@@ -83,7 +83,7 @@ final class DocumentReader
     private function lines(ColumnNode $node, array $read): array
     {
         $lines = [new Line($node->depth, array_map(
-            fn (ExportColumn $column): string|int|float|bool|null => $this->cell($read['values'][$column->key] ?? null, $column),
+            fn (ExportColumn $column): string|int|float|bool|null => $this->cell($read['values'][$column->key] ?? null),
             $node->columns,
         ), $node->types())];
 
@@ -106,15 +106,15 @@ final class DocumentReader
     }
 
     /**
-     * A value as a simple cell value: an enum becomes its value; an array or object cannot be a cell.
+     * A value as a simple cell value: an enum becomes its value; anything that cannot be a cell (an array or object) is left empty.
      */
-    private function cell(mixed $value, ExportColumn $column): string|int|float|bool|null
+    private function cell(mixed $value): string|int|float|bool|null
     {
         return match (true) {
             $value === null => null,
             $value instanceof BackedEnum => $value->value,
             is_scalar($value) => $value,
-            default => throw ExportException::invalidColumnValue($column->key),
+            default => null,
         };
     }
 }

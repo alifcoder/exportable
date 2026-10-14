@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Exceptions\ExportException;
-use Alif\Export\Helpers\ExportQuery;
 use Illuminate\Database\Eloquent\Builder;
 
 /** The list query saved as SQL text and bindings, so the job can run it later without the request. */
@@ -23,7 +22,7 @@ final readonly class PreparedQuery
 
     /**
      * Turns an Eloquent query into SQL and bindings. The job appends its own `limit`/`offset` to read chunk by chunk,
-     * so the query must have neither (see {@see ExportQuery::assertPageable()}).
+     * so the query must have neither (checked by `HandlesExport`).
      *
      * @param Builder<*> $builder The applied, ordered list query.
      */

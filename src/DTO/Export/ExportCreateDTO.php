@@ -6,7 +6,6 @@ namespace Alif\Export\DTO\Export;
 
 use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Exceptions\ExportException;
-use Alif\Export\Helpers\ExportQuery;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -32,22 +31,19 @@ final readonly class ExportCreateDTO
     ) {}
 
     /**
-     * Prepares the host's request for the queue: the query compiled to SQL, the model, resource and eager loads recorded.
-     *
-     * @param  list<ExportColumn>  $columns  The request's columns, already resolved and typed.
-     * @param  list<string>  $relations  The eager loads of the request's query, see {@see ExportQuery::eagerLoads()}.
+     * Prepares the validated export for the queue: the query compiled to SQL, the model, resource and eager loads recorded.
      *
      * @throws ExportException A driver that cannot be paged.
      */
-    public static function from(ExportDTO $request, array $columns, array $relations): self
+    public static function from(ExportDTO $request): self
     {
         return new self(
             $request->format,
-            $columns,
+            $request->columns,
             PreparedQuery::from($request->query),
             get_class($request->query->getModel()),
             $request->resource,
-            $relations,
+            $request->relations,
         );
     }
 
