@@ -57,7 +57,7 @@ final readonly class ExportCreateDTO
     public static function fromArray(array $data): self
     {
         if (! isset($data['model'], $data['resource'])) {
-            throw ExportException::invalidRegistration('The queued export has no "model"; it was queued by an older version.');
+            throw ExportException::invalidRegistration('no_model');
         }
 
         return new self(

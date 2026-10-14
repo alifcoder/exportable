@@ -8,6 +8,28 @@ return [
     'unknown_column' => 'Unknown column ":column".',
     'invalid_request' => 'The export request is invalid.',
     'nested_too_deep' => 'Lists can be nested :max levels deep at most.',
+    'unpageable_query' => 'The export query cannot be paged: :reason.',
+    'unsupported_eager_load' => 'The eager load ":relation" is constrained; the export can only repeat plain eager loads.',
+    'resource_failed' => 'The resource ":resource" failed to render a row: :reason',
+    'row_limit_exceeded' => 'Export exceeds the :max row limit.',
+    'storage_write_failed' => 'Could not store the export file: :reason.',
+    'invalid_configuration' => 'Missing export configuration "export.:key".',
+    'invalid_registration_detail' => 'The export is set up wrongly: :reason',
+    'registration' => [
+        'no_model' => 'The queued export has no "model"; it was queued by an older version.',
+        'unsupported_driver' => 'Export cannot page the ":driver" driver.',
+    ],
+    'unpageable' => [
+        'limit_or_offset' => 'it has a limit or offset',
+        'no_order_by' => 'it has no ORDER BY',
+    ],
+    'storage' => [
+        'temp_file' => 'cannot create a temporary file',
+        'cannot_open' => 'cannot open :path',
+        'xlsx_reopen' => 'cannot reopen the xlsx to finish it',
+        'xlsx_save' => 'cannot save the finished xlsx',
+        'xlsx_read' => 'cannot read the xlsx sheet',
+    ],
     'errors' => [
         'invalid_request' => 'The export request is invalid.',
         'nested_too_deep' => 'Lists are nested too deeply.',

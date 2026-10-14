@@ -31,7 +31,7 @@ final readonly class PreparedQuery
         $connection = $builder->getModel()->getConnection();
 
         if ($connection->getDriverName() !== self::DRIVER) {
-            throw ExportException::invalidRegistration(sprintf('Export cannot page the "%s" driver.', $connection->getDriverName()));
+            throw ExportException::invalidRegistration('unsupported_driver', ['driver' => $connection->getDriverName()]);
         }
 
         // A clone, so compiling never changes the received builder; compiled exactly as given.

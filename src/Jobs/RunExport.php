@@ -52,7 +52,7 @@ final class RunExport implements ShouldQueue
 
         try {
             $task = ExportTask::fromArray($this->task);
-            $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed('cannot create a temporary file');
+            $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed(__('export::messages.storage.temp_file'));
             $rows = $write($task, $local);
             $name = $task->id.'.'.$task->request->format->extension();
             $fileId = $store->put($task, $local, $name, $task->request->format->mimeType());

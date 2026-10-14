@@ -63,11 +63,11 @@ final class ExportValidator
         $base = $query->getQuery();
 
         if ($base->limit !== null || $base->offset !== null) {
-            throw ExportException::unpageableQuery('it has a limit or offset');
+            throw ExportException::unpageableQuery('limit_or_offset');
         }
 
         if (empty($base->orders)) {
-            throw ExportException::unpageableQuery('it has no ORDER BY');
+            throw ExportException::unpageableQuery('no_order_by');
         }
     }
 

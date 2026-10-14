@@ -82,44 +82,50 @@ final class ExportException extends RuntimeException
     }
 
     /** The host's query cannot be read in chunks (it has a limit or offset, or no ORDER BY). */
+    /** @param  string  $reason  A key of `export::messages.unpageable.*`. */
     public static function unpageableQuery(string $reason): self
     {
-        return new self(sprintf('The export query cannot be paged: %s.', $reason), 'unpageable_query');
+        return new self(__('export::messages.unpageable_query', ['reason' => __('export::messages.unpageable.'.$reason)]), 'unpageable_query');
     }
 
     /** The host's query has an eager load with a constraint, which the job cannot repeat. */
     public static function unsupportedEagerLoad(string $relation): self
     {
-        return new self(sprintf('The eager load "%s" is constrained; the export can only repeat plain eager loads.', $relation), 'unsupported_eager_load');
+        return new self(__('export::messages.unsupported_eager_load', ['relation' => $relation]), 'unsupported_eager_load');
     }
 
     /** The resource threw while rendering a row. */
     public static function resourceFailed(string $resource, Throwable $previous): self
     {
-        return new self(sprintf('The resource "%s" failed to render a row: %s', $resource, $previous->getMessage()), 'resource_failed', 500, [], $previous);
+        return new self(__('export::messages.resource_failed', ['resource' => $resource, 'reason' => $previous->getMessage()]), 'resource_failed', 500, [], $previous);
     }
 
-    /** The export is set up wrongly (for example, an unsupported database driver). */
-    public static function invalidRegistration(string $message): self
+    /**
+     * The export is set up wrongly (for example, an unsupported database driver).
+     *
+     * @param  string  $reason  A key of `export::messages.registration.*`.
+     * @param  array<string, scalar>  $replace
+     */
+    public static function invalidRegistration(string $reason, array $replace = []): self
     {
-        return new self($message, 'invalid_registration');
+        return new self(__('export::messages.invalid_registration_detail', ['reason' => __('export::messages.registration.'.$reason, $replace)]), 'invalid_registration');
     }
 
     /** The export has more rows than the format allows (found while writing). */
     public static function rowLimitExceeded(int $cap): self
     {
-        return new self(sprintf('Export exceeds the %d row limit.', $cap), 'row_limit_exceeded');
+        return new self(__('export::messages.row_limit_exceeded', ['max' => $cap]), 'row_limit_exceeded');
     }
 
     /** A file could not be written or stored. */
     public static function storageWriteFailed(string $reason): self
     {
-        return new self(sprintf('Could not store the export file: %s.', $reason), 'storage_write_failed');
+        return new self(__('export::messages.storage_write_failed', ['reason' => $reason]), 'storage_write_failed');
     }
 
     /** A setting is missing in `config/export.php`. */
     public static function invalidConfiguration(string $key): self
     {
-        return new self(sprintf('Missing export configuration "export.%s".', $key), 'invalid_configuration');
+        return new self(__('export::messages.invalid_configuration', ['key' => $key]), 'invalid_configuration');
     }
 }

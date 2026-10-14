@@ -22,7 +22,7 @@ final class CsvWriter implements Writer
         $file = @fopen($path, 'wb');
 
         if ($file === false) {
-            throw ExportException::storageWriteFailed("cannot open $path");
+            throw ExportException::storageWriteFailed(__('export::messages.storage.cannot_open', ['path' => $path]));
         }
 
         $delimiter = $this->style->csvDelimiter();
