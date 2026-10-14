@@ -12,6 +12,7 @@ use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use ReflectionClass;
 use ReflectionFunction;
@@ -156,6 +157,16 @@ final class ExportValidator
     public static function validateColumns(Builder $query, string $resource, array $requested): array
     {
         $columns = self::flattenColumns($requested, []);
+
+        // A foreign key is never exported (`id` is allowed): use a field of the related record instead.
+        $keys = array_filter($columns, fn (ExportColumn $c): bool => str_ends_with(Str::afterLast($c->key, '.'), '_id'));
+
+        if ($keys !== []) {
+            throw ExportException::unknownColumns(array_values(array_map(
+                fn (ExportColumn $c): string => implode('.', [...$c->groups, $c->key]),
+                $keys,
+            )));
+        }
 
         $rows = new ResourceRows($resource);
         $blank = $query->getModel()->newInstance();
