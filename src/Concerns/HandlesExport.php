@@ -47,6 +47,7 @@ trait HandlesExport
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
+        ExportValidator::orderByKey($query);
         $relations = ExportValidator::validateEagerLoads($query);
         // Counted once: the same number is the progress denominator and the cap check.
         $count = ExportConfig::bool('progress.enabled') ? ExportValidator::countRows($query) : null;

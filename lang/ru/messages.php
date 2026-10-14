@@ -23,7 +23,7 @@ return [
     'unpageable' => [
         'group_or_union' => 'в нём есть group или union',
         'limit_or_offset' => 'в нём есть limit или offset',
-        'no_order_by' => 'в нём нет ORDER BY',
+        'distinct' => 'в нём выбираются distinct строки',
     ],
     'storage' => [
         'temp_file' => 'не удалось создать временный файл',

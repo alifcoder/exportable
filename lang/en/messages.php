@@ -23,7 +23,7 @@ return [
     'unpageable' => [
         'group_or_union' => 'it groups or unions rows',
         'limit_or_offset' => 'it has a limit or offset',
-        'no_order_by' => 'it has no ORDER BY',
+        'distinct' => 'it selects distinct rows',
     ],
     'storage' => [
         'temp_file' => 'cannot create a temporary file',

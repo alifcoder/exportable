@@ -12,6 +12,7 @@ use Closure;
 use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use ReflectionClass;
@@ -52,8 +53,8 @@ final class ExportValidator
     }
 
     /**
-     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page or group or union, and the chunks
-     * only follow each other without repeats or gaps when the query has an ORDER BY. The host prepares both.
+     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and not group,
+     * union or select distinct rows: paging over those is not stable (and an added ORDER BY would not be valid).
      *
      * @param  Builder<*>  $query
      *
@@ -71,9 +72,29 @@ final class ExportValidator
             throw ExportException::unpageableQuery('group_or_union');
         }
 
-        if (empty($base->orders)) {
-            throw ExportException::unpageableQuery('no_order_by');
+        if ($base->distinct !== false) {
+            throw ExportException::unpageableQuery('distinct');
         }
+    }
+
+    /**
+     * Ends the order with the model's key. The chunks follow each other by offset, so rows that tie on the host's sort
+     * (`-created_at`) must keep one position, or a chunk boundary repeats or skips a row; an unsorted query gets an order
+     * too. Nothing is added when the key already ends the order.
+     *
+     * @param  Builder<*>  $query
+     */
+    public static function orderByKey(Builder $query): void
+    {
+        $model = $query->getModel();
+        $last = Arr::last((array) $query->getQuery()->orders);
+        $column = is_array($last) ? ($last['column'] ?? null) : null;
+
+        if (is_string($column) && in_array($column, [$model->getQualifiedKeyName(), $model->getKeyName()], true)) {
+            return;
+        }
+
+        $query->orderBy($model->getQualifiedKeyName());
     }
 
     /**
