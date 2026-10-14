@@ -11,6 +11,8 @@ use Alif\Export\Exceptions\ExportException;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportValidator;
 use Alif\Export\Services\Interfaces\ExportServiceInterface;
+use Alif\QueryFilter\Enums\FieldType;
+use Alif\QueryFilter\Field;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
@@ -45,6 +47,7 @@ trait HandlesExport
         $filter->apply($query);
 
         ExportValidator::assertPageable($query);
+        ExportValidator::orderByKey($query);
         $relations = ExportValidator::validateEagerLoads($query);
         // Counted once: the same number is the progress denominator and the cap check.
         $count = ExportConfig::bool('progress.enabled') ? ExportValidator::countRows($query) : null;
@@ -55,7 +58,7 @@ trait HandlesExport
             query: $query,
             resource: $filter->exportResource(),
             format: $format,
-            columns: ExportValidator::validateColumns($query, $filter->exportResource(), $parameters['columns']),
+            columns: ExportValidator::validateColumns($query, $filter->exportResource(), $parameters['columns'], $filter->declaredTypes()),
             relations: $relations,
             totalRows: $count,
         ));
@@ -98,6 +101,29 @@ trait HandlesExport
         }
 
         return true;
+    }
+
+    /**
+     * The types the filter's fields declare (`Field::type()`), by field name: the host's say about a cell's type, which
+     * wins over the type guessed from the values. A filter without `fields()` declares none.
+     *
+     * @return array<string, FieldType>
+     */
+    protected function declaredTypes(): array
+    {
+        if (! method_exists($this, 'fields')) {
+            return [];
+        }
+
+        $types = [];
+
+        foreach ($this->fields() as $name => $field) {
+            if ($field instanceof Field && $field->type !== null) {
+                $types[(string) $name] = $field->type;
+            }
+        }
+
+        return $types;
     }
 
     /** The resource the list renders its rows with: the short one for `short=1` when the filter has one. */

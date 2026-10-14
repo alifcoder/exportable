@@ -57,7 +57,8 @@ final readonly class TypedValue
             && self::digits((string) $value) <= self::MAX_SAFE_DIGITS;
 
         if (! $isNumber) {
-            return new self(FieldType::String, (string) $value);
+            // A float prints with 14 digits by default; its shortest exact form keeps the digits it really has.
+            return new self(FieldType::String, is_float($value) && is_finite($value) ? var_export($value, true) : (string) $value);
         }
 
         $number = $value + 0;

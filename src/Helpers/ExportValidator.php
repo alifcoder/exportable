@@ -7,10 +7,12 @@ namespace Alif\Export\Helpers;
 use Alif\Export\DTO\Export\ExportColumn;
 use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Exceptions\ExportException;
+use Alif\QueryFilter\Enums\FieldType;
 use Closure;
 use Generator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use ReflectionClass;
@@ -51,8 +53,8 @@ final class ExportValidator
     }
 
     /**
-     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page or group or union, and the chunks
-     * only follow each other without repeats or gaps when the query has an ORDER BY. The host prepares both.
+     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and not group
+     * or union rows: paging over those is not stable (and an added ORDER BY would not be valid).
      *
      * @param  Builder<*>  $query
      *
@@ -69,10 +71,31 @@ final class ExportValidator
         if ($base->groups !== null || $base->havings !== null || $base->unions !== null) {
             throw ExportException::unpageableQuery('group_or_union');
         }
+    }
 
-        if (empty($base->orders)) {
-            throw ExportException::unpageableQuery('no_order_by');
+    /**
+     * Ends the order with the model's key. The chunks follow each other by offset, so rows that tie on the host's sort
+     * (`-created_at`) must keep one position, or a chunk boundary repeats or skips a row; an unsorted query gets an order
+     * too. Nothing is added when the key already ends the order.
+     *
+     * @param  Builder<*>  $query
+     */
+    public static function orderByKey(Builder $query): void
+    {
+        // A SELECT DISTINCT is used as the host wrote it: it only accepts an order over its selected columns.
+        if ($query->getQuery()->distinct !== false) {
+            return;
         }
+
+        $model = $query->getModel();
+        $last = Arr::last((array) $query->getQuery()->orders);
+        $column = is_array($last) ? ($last['column'] ?? null) : null;
+
+        if (is_string($column) && in_array($column, [$model->getQualifiedKeyName(), $model->getKeyName()], true)) {
+            return;
+        }
+
+        $query->orderBy($model->getQualifiedKeyName());
     }
 
     /**
@@ -149,11 +172,12 @@ final class ExportValidator
      * @param  Builder<*>  $query
      * @param  class-string  $resource
      * @param  array<string, mixed>  $requested  `key => heading`, and `list => {key => heading, ...}` nested.
+     * @param  array<string, FieldType>  $declared  The type a filter's `Field` declares, by the column's dotted path; it wins over the guess.
      * @return list<ExportColumn> The requested columns in the order sent, each with its type.
      *
      * @throws ExportException A column that cannot be exported or the resource does not yield, or a resource that fails.
      */
-    public static function validateColumns(Builder $query, string $resource, array $requested): array
+    public static function validateColumns(Builder $query, string $resource, array $requested, array $declared = []): array
     {
         $columns = self::flattenColumns($requested, []);
 
@@ -177,7 +201,9 @@ final class ExportValidator
         }
 
         return array_map(
-            fn (ExportColumn $c): ExportColumn => $c->withType(CellType::guess($c->key, self::layoutLevelOf($c, $layout)['values'][$c->key] ?? null)),
+            fn (ExportColumn $c): ExportColumn => $c->withType(
+                $declared[implode('.', [...$c->groups, $c->key])] ?? CellType::guess($c->key, self::layoutLevelOf($c, $layout)['values'][$c->key] ?? null),
+            ),
             $columns,
         );
     }
