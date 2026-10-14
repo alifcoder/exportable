@@ -33,7 +33,7 @@ final class XlsxPackage
         $rewritten = tempnam(sys_get_temp_dir(), 'export_sheet_');
 
         if ($zip->open($path) !== true || $rewritten === false) {
-            throw ExportException::storageWriteFailed('cannot reopen the xlsx to finish it');
+            throw ExportException::storageWriteFailed(__('export::messages.storage.xlsx_reopen'));
         }
 
         try {
@@ -44,7 +44,7 @@ final class XlsxPackage
             $zip->addFile($rewritten, self::SHEET);
 
             if (! $zip->close()) {
-                throw ExportException::storageWriteFailed('cannot save the finished xlsx');
+                throw ExportException::storageWriteFailed(__('export::messages.storage.xlsx_save'));
             }
         } finally {
             @unlink($rewritten);
@@ -77,7 +77,7 @@ final class XlsxPackage
         $out = fopen($to, 'wb');
 
         if ($from === false || $out === false) {
-            throw ExportException::storageWriteFailed('cannot read the xlsx sheet');
+            throw ExportException::storageWriteFailed(__('export::messages.storage.xlsx_read'));
         }
 
         try {
