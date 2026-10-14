@@ -6,7 +6,10 @@ namespace Alif\Export\Helpers;
 
 use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Exceptions\ExportException;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use ReflectionClass;
+use ReflectionFunction;
 
 /**
  * The checks on the host's query before the job exists: it can be read in chunks, it selects something, it fits the
@@ -80,5 +83,60 @@ final class ExportQuery
         if ($exceeds) {
             throw ExportException::tooManyRows($format, $cap);
         }
+    }
+
+    /**
+     * The names the query eager loads, for the job to repeat. A constrained eager load cannot be repeated.
+     *
+     * @param  Builder<*>  $query
+     * @return list<string>
+     *
+     * @throws ExportException An eager load with a constraint of its own.
+     */
+    public function eagerLoads(Builder $query): array
+    {
+        $relations = [];
+
+        foreach ($query->getEagerLoads() as $name => $constraint) {
+            if (! $this->isPlain($constraint)) {
+                throw ExportException::unsupportedEagerLoad((string) $name);
+            }
+
+            $relations[] = (string) $name;
+        }
+
+        return $relations;
+    }
+
+    /**
+     * A plain eager load is one Eloquent itself declared without constraining anything: Eloquent wraps every
+     * constraint of a relation in a closure of its own that holds the originals, so each one is looked at. A closure
+     * declared anywhere else, or one Eloquent built from a `relation:column` select, is a constraint.
+     */
+    private function isPlain(Closure $constraint): bool
+    {
+        $function = new ReflectionFunction($constraint);
+
+        if ($function->getFileName() !== (new ReflectionClass(Builder::class))->getFileName()) {
+            return false;
+        }
+
+        $captured = $function->getStaticVariables();
+
+        if ($captured === []) {
+            return true;
+        }
+
+        if (array_keys($captured) !== ['constraints'] || ! is_array($captured['constraints'])) {
+            return false;
+        }
+
+        foreach ($captured['constraints'] as $inner) {
+            if (! $inner instanceof Closure || ! $this->isPlain($inner)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

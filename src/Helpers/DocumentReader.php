@@ -29,7 +29,7 @@ final class DocumentReader
      */
     public function documents(ExportCreateDTO $dto): Generator
     {
-        $resource = new ResourceRows($dto->rows->resource);
+        $resource = new ResourceRows($dto->resource);
         $tree = ColumnNode::tree($dto->columns);
         $cap = $dto->format->maxRows();
         $written = 0;
@@ -55,7 +55,7 @@ final class DocumentReader
     {
         $query = $dto->query;
         $connection = DB::connection($query->connection);
-        $model = new $dto->rows->model;
+        $model = new $dto->model;
         $chunk = max(1, ExportConfig::int('chunk_size'));
 
         for ($offset = 0; ; $offset += $chunk) {
@@ -64,7 +64,7 @@ final class DocumentReader
             $models = $model->newCollection(array_map(fn (object $record): Model => $model->newFromBuilder((array) $record, $query->connection), $records));
             // Eloquent only arms the lazy loading guard for result sets with more than one model; arm it for every row.
             $models->each(fn (Model $m) => $m->preventsLazyLoading = Model::preventsLazyLoading());
-            $models->load($dto->rows->relations);
+            $models->load($dto->relations);
 
             yield from $models;
 

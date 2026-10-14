@@ -22,4 +22,10 @@ class Doc extends Model
     {
         return $this->hasMany(Doc::class, 'approval_doc_id');
     }
+
+    /** @return HasMany<Doc, $this> A constraint declared on the relation itself, which the job repeats on its own. */
+    public function activeLines(): HasMany
+    {
+        return $this->hasMany(Doc::class, 'doc_id')->where('quantity', '>', 0);
+    }
 }

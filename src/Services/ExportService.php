@@ -7,8 +7,6 @@ namespace Alif\Export\Services;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\DTO\Export\ExportTask;
-use Alif\Export\DTO\Export\PreparedQuery;
-use Alif\Export\DTO\Export\RowSource;
 use Alif\Export\Helpers\ColumnResolver;
 use Alif\Export\Helpers\ExportConfig;
 use Alif\Export\Helpers\ExportQuery;
@@ -31,23 +29,16 @@ final readonly class ExportService implements ExportServiceInterface
      */
     public function create(ExportDTO $request): ExportTask
     {
-        // Asked once: every check, the eager-load record and the compiled SQL read this one builder.
-        $query = $request->source->exportQuery();
-        $resource = $request->source->exportResource();
+        // One builder: every check and the compiled SQL read it.
+        $query = $request->query;
         $this->query->assertPageable($query);
-        $rows = RowSource::from($query, $resource);
+        $relations = $this->query->eagerLoads($query);
         // Counted once: the same number is the progress denominator and the cap check.
         $count = ExportConfig::bool('progress.enabled') ? $this->query->count($query) : null;
         $this->query->assertNotEmpty($query, $count);
         $this->query->assertWithinCap($request->format, $query, $count);
 
-        $dto = new ExportCreateDTO(
-            $request->format,
-            $this->columns->resolve($request, $query, $resource),
-            PreparedQuery::from($query),
-            $rows,
-        );
-
+        $dto = ExportCreateDTO::from($request, $this->columns->resolve($request), $relations);
         $task = new ExportTask((string) Str::uuid(), $dto, $count);
         RunExport::dispatch($task->toArray());
 

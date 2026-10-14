@@ -5,20 +5,19 @@
 Breaking:
 
 - `Enums\ColumnTypeEnum` is removed: columns are typed with `Alif\QueryFilter\Enums\FieldType` (`ExportColumn::$type`, payload value unchanged for String/Integer/Decimal/Boolean/Date/DateTime/Time; `Uuid` is written as text). `Percent`, `Currency` and `Number` are dropped (nothing sets them; a value-guessed numeric column is `Integer` for an int and `Decimal` for a float or numeric string). The config keys `style.xlsx.percent_format` and `style.xlsx.currency_format` are no longer read (remove them); `ExportStyle::percentFormat()`/`currencyFormat()` are gone. The guess moved to `Helpers\CellType::guess()`. Queued payloads with a `percent`, `currency` or `number` column type fail on read: drain the queue.
-- The package no longer rebuilds or re-applies the filter. The host provides a ready query and the resource: `HandlesExport::query()` and `apply()` are replaced by the abstract `exportQuery(): Builder` (filter applied, no limit/offset, a stable ORDER BY, read as given) and `exportResource(): string`. `Contracts\ExportSource`, `exportSource()`, `static $model`/`$resource` and `getWith()` are no longer used; `Helpers\ExportQuery::wholeSet()` is removed: the package never clears limit/offset, adds ORDER BY or strips eager loads, and never changes the received builder.
-- `ExportDTO::$source` is the filter object (`$this`), not its class name; `ExportDTO` is `(ExportableFilter $source, format, columns)`: the query and resource are asked from the filter's public `exportQuery()` (once per export) and `exportResource()`; new `Contracts\ExportableFilter`. `ExportCreateDTO::$source` stays the class name.
+- The package no longer rebuilds or re-applies the filter. `HandlesExport` takes `query()` with the filter `apply()`ed and the filter's static `$resource`, drops the request's `limit`/`offset` in `prepare()` and hands them over; the host implements no hook (`exportQuery()`, `exportResource()`, `exportLists()`, `Contracts\ExportableFilter` and `Contracts\ExportSource` do not exist). `Helpers\ExportQuery::wholeSet()` is removed: the package never clears limit/offset, adds ORDER BY or strips eager loads, and never changes the received builder.
+- `ExportDTO` is `(Builder $query, class-string $resource, format, array $columns)`; `columns` is the request's `key => heading` / `list => {...}` array as sent. `ExportCreateDTO::$source` is gone.
 - `ExportCreateDTO` no longer carries `source` (the filter class name; the job never read it): `(format, columns, query, rows)`. Queued payloads still carrying `source` are read fine.
-- Eager loads follow the builder: the job loads `array_keys($builder->getEagerLoads())` (`RowSource`); a constrained eager load fails with `unsupported_eager_load`.
+- Eager loads follow the builder: the job loads `array_keys($builder->getEagerLoads())` (`ExportQuery::eagerLoads()`); a constrained eager load fails with `unsupported_eager_load`.
 - A query with a limit/offset or no ORDER BY is refused with `unpageable_query` (500) before anything is queued.
-- A list item column (declared in `exportLists()`, offered by its item filter) that the item resource does not yield is no longer `unknown_column`: it is accepted and written as an empty cell. Document columns keep `unknown_column`.
+- Columns are validated in one place, `Helpers\ColumnResolver`, against the resource only, never against the filter's `fields()`: a document column or a list the resource does not yield is `unknown_column`; a list item column of a list with no sampled items is accepted untyped, and an item that does not yield it gets an empty cell.
 - Every failure of `export()` is an `ExportException` with `errorCode`, `status` (422/500), `errors` and `isClientError()`; the `ValidationException`s are gone. A 422 has `errors.columns`/`errors.format`. New codes: `invalid_request`, `needs_document_column`, `nested_too_deep`, `columns_refused`, `unknown_column`, `no_data`, `too_many_rows`, `unpageable_query`, `unsupported_eager_load`, `resource_failed`.
-- Columns ending in `_id` (last dotted segment) are refused (`columns_refused`) even when offered; `id` is allowed. A list the filter does not declare is `list_not_offered` (was `column_not_offered`).
+- Columns ending in `_id` (last dotted segment) are refused (`columns_refused`, `column_not_exportable`); `id` is allowed.
 - Queue payload: `ExportCreateDTO` carries `rows` and `ExportColumn` keeps its `type`. Drain the export queue before deploying; a payload without `rows` fails with `invalid_registration`.
 - Requires `alifcoder/query-filter` `^2.0.2`.
 
 Fixed:
 
-- A list not declared in `exportLists()` is no longer refused with `list_not_offered`: its columns are tried on the resource and written empty (null) when an item does not yield them. A declared list is still checked against its item filter.
 - Compiling the query no longer mutates the received builder (`toBase()` was changed in place).
 - Column order is kept as requested (document, then list columns to any depth).
 - A queued payload the job cannot read (an older version, no `rows`) is announced as a failed `ExportFinished` (`invalid_registration`) for its id instead of crashing the job.
@@ -26,8 +25,7 @@ Fixed:
 
 Added:
 
-- `Field::type()` (query-filter 2.0.2) is honoured: the `FieldType` of a column's `Field` sets its cell type (`ColumnTypeEnum::fromField()`), winning over the guess from sampled values; no type keeps the guess. A declared list the resource does not render is accepted with no sub rows.
-- `Helpers\RequestedColumns`, `DTO\Export\RowSource`; messages `list_not_offered`, `column_not_exportable`, `invalid_request` and an `errors.<code>` text for every code (uz, ru, en).
+- Messages `column_not_exportable`, `invalid_request` and an `errors.<code>` text for every code (uz, ru, en).
 - List columns: `columns` may hold `list => {key => heading}` (e.g. `products`), nested to 5 levels and as many sibling lists as wanted. They are written as sub rows below their document row; in xlsx as a collapsed Excel outline (`+` opens them), in csv indented by depth. `ExportColumn` gains `groups`, `Writers\Line` and `Helpers\ColumnNode` are new.
 
 Changed:

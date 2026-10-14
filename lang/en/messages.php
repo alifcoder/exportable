@@ -6,8 +6,6 @@ return [
     'no_data' => 'There is no data to export.',
     'too_many_rows' => 'Too many rows for :format export (maximum :max).',
     'unknown_column' => 'Unknown column ":column".',
-    'column_not_offered' => 'Column ":column" is not offered by the filter.',
-    'list_not_offered' => 'List ":column" is not offered by the filter.',
     'column_not_exportable' => 'Column ":column" cannot be exported.',
     'invalid_request' => 'The export request is invalid.',
     'needs_document_column' => 'At least one column must come from the document itself, not from a list.',

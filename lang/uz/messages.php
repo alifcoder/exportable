@@ -6,8 +6,6 @@ return [
     'no_data' => 'Eksport qilish uchun ma\'lumot yo\'q.',
     'too_many_rows' => ':format eksporti uchun qatorlar juda ko\'p (ko\'pi bilan :max).',
     'unknown_column' => 'Noma\'lum ustun: ":column".',
-    'column_not_offered' => '":column" ustuni filterda mavjud emas.',
-    'list_not_offered' => '":column" ro\'yxati filterda mavjud emas.',
     'column_not_exportable' => '":column" ustunini eksport qilib bo\'lmaydi.',
     'invalid_request' => 'Eksport so\'rovi noto\'g\'ri.',
     'needs_document_column' => 'Kamida bitta ustun hujjatning o\'zidan bo\'lishi kerak, ro\'yxatdan emas.',

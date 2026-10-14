@@ -8,7 +8,6 @@ use Alif\Export\Contracts\ExportFileStore;
 use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\DTO\Export\PreparedQuery;
-use Alif\Export\DTO\Export\RowSource;
 use Alif\Export\Enums\ExportFormatEnum;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
@@ -122,7 +121,7 @@ final class RunExport implements ShouldQueue
 
         return new ExportTask(
             (string) ($this->task['id'] ?? ''),
-            new ExportCreateDTO($format, [], new PreparedQuery(null, '', []), new RowSource(Model::class, JsonResource::class, [])),
+            new ExportCreateDTO($format, [], new PreparedQuery(null, '', []), Model::class, JsonResource::class, []),
             null,
         );
     }

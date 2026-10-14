@@ -60,4 +60,19 @@ final class ColumnOrderTest extends TestCase
             array_values(array_filter(array_map(trim(...), preg_split('/\R/', ltrim($csv, "\xEF\xBB\xBF"))))),
         );
     }
+
+    public function test_a_list_column_the_item_does_not_yield_is_written_empty(): void
+    {
+        $tree = ColumnNode::tree([
+            new ExportColumn('number', 'No', null, []),
+            new ExportColumn('quantity', 'Qty', null, ['lines']),
+            new ExportColumn('ghost', 'Ghost', null, ['lines']),
+        ]);
+        $read = ['values' => ['number' => 'N1'], 'lists' => ['lines' => [['values' => ['quantity' => 5], 'lists' => []]]]];
+
+        config(['export' => require __DIR__.'/../config/export.php']);
+        $lines = (new ReflectionMethod(DocumentReader::class, 'lines'))->invoke(new DocumentReader, $tree, $read);
+
+        $this->assertSame([5, null], $lines[2]->cells);
+    }
 }

@@ -6,8 +6,6 @@ return [
     'no_data' => 'Нет данных для экспорта.',
     'too_many_rows' => 'Слишком много строк для экспорта :format (максимум :max).',
     'unknown_column' => 'Неизвестная колонка: ":column".',
-    'column_not_offered' => 'Колонка ":column" недоступна в фильтре.',
-    'list_not_offered' => 'Список ":column" недоступен в фильтре.',
     'column_not_exportable' => 'Колонку ":column" нельзя экспортировать.',
     'invalid_request' => 'Запрос на экспорт некорректен.',
     'needs_document_column' => 'Хотя бы одна колонка должна относиться к самому документу, а не к списку.',

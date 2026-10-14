@@ -9,29 +9,36 @@ use Alif\Export\DTO\Export\ExportDTO;
 use Alif\Export\Exceptions\ExportException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
 
 /**
- * Checks the requested columns against what the export's resource really yields, and gives each column its type.
- * It renders a few rows of the received query (with its own eager loads) through the resource, a "sample", and looks the
- * columns up in what came out.
+ * The one place that validates the requested `columns`. It flattens the nested lists into ordered {@see ExportColumn}s,
+ * refuses a column ending in `_id`, limits the depth of lists, wants one column of the document itself, and checks the
+ * rest against what the export's resource really yields: it renders a few rows of the received query (with its own eager
+ * loads) through the resource, a "sample", and looks the columns up in what came out. Each column gets its type.
  */
 final class ColumnResolver
 {
     private const int SAMPLE_ROWS = 20;
 
-    /**
-     * @param  Builder<*>  $query  The filter's query, read as given.
-     * @param  class-string<JsonResource>  $resource
-     * @return list<ExportColumn> The requested columns, each with its type.
-     *
-     * @throws ExportException A document column the resource does not yield, or a resource that fails.
-     */
-    public function resolve(ExportDTO $request, Builder $query, string $resource): array
-    {
-        $layout = (new ResourceRows($resource))->layout($this->sample($query), $query->getModel()->newInstance());
+    /** Lists inside lists, counted from the document. */
+    private const int MAX_DEPTH = 5;
 
-        $unknown = array_filter($request->columns, fn (ExportColumn $c): bool => ! $this->isKnown($c, $layout));
+    /**
+     * @return list<ExportColumn> The requested columns in the order sent, each with its type.
+     *
+     * @throws ExportException A column that cannot be exported or the resource does not yield, or a resource that fails.
+     */
+    public function resolve(ExportDTO $request): array
+    {
+        $query = $request->query;
+        $columns = $this->flatten($request->columns, []);
+
+        $this->assertExportable($columns);
+
+        $layout = (new ResourceRows($request->resource))->layout($this->sample($query), $query->getModel()->newInstance());
+
+        $unknown = array_filter($columns, fn (ExportColumn $c): bool => ! $this->isKnown($c, $layout));
 
         if ($unknown !== []) {
             throw ExportException::unknownColumns(array_values(array_map(
@@ -41,9 +48,64 @@ final class ColumnResolver
         }
 
         return array_map(
-            fn (ExportColumn $c): ExportColumn => $c->withType($c->type ?? CellType::guess($c->key, $this->levelOf($c, $layout)['values'][$c->key] ?? null)),
-            $request->columns,
+            fn (ExportColumn $c): ExportColumn => $c->withType(CellType::guess($c->key, $this->levelOf($c, $layout)['values'][$c->key] ?? null)),
+            $columns,
         );
+    }
+
+    /**
+     * `key => heading` and `list => {key => heading, ...}` into one ordered list; a list's columns carry its name in `groups`.
+     *
+     * @param  array<string, mixed>  $columns
+     * @param  list<string>  $groups
+     * @return list<ExportColumn>
+     *
+     * @throws ExportException
+     */
+    private function flatten(array $columns, array $groups): array
+    {
+        $result = [];
+
+        foreach ($columns as $key => $value) {
+            if (! is_array($value)) {
+                $result[] = new ExportColumn((string) $key, (string) $value, null, $groups);
+
+                continue;
+            }
+
+            if (count($groups) >= self::MAX_DEPTH) {
+                throw ExportException::nestedTooDeep(self::MAX_DEPTH);
+            }
+
+            array_push($result, ...$this->flatten($value, [...$groups, (string) $key]));
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  list<ExportColumn>  $columns
+     *
+     * @throws ExportException
+     */
+    private function assertExportable(array $columns): void
+    {
+        if (array_filter($columns, fn (ExportColumn $c): bool => $c->groups === []) === []) {
+            throw ExportException::needsDocumentColumn();
+        }
+
+        $refused = [];
+
+        foreach ($columns as $c) {
+            if (str_ends_with(Str::afterLast($c->key, '.'), '_id')) {
+                $path = implode('.', [...$c->groups, $c->key]);
+                $refused[] = (string) __('export::messages.column_not_exportable', ['column' => $path]);
+            }
+        }
+
+        if ($refused !== []) {
+            throw ExportException::columnsRefused($refused);
+        }
     }
 
     /**
@@ -93,15 +155,19 @@ final class ColumnResolver
      */
     private function isKnown(ExportColumn $column, array $layout): bool
     {
-        // A list item column is tried and written empty when the item does not yield it; the filter has already checked
-        // that the list and the column are offered. Only a document column must exist in the resource.
-        if ($column->groups !== []) {
+        // The list must be in the resource, and the column in the list's items. A list that no sampled document has
+        // items in shows no keys: its columns are accepted untyped, and an item that does not yield one gets an empty cell.
+        $level = $this->levelOf($column, $layout);
+
+        if ($level === null) {
+            return false;
+        }
+
+        if ($column->groups !== [] && $level['values'] === [] && $level['lists'] === []) {
             return true;
         }
 
-        $level = $this->levelOf($column, $layout);
-
-        return $level !== null && (array_key_exists($column->key, $level['values']) || $this->isUnderNullObject($column->key, $level['values']));
+        return array_key_exists($column->key, $level['values']) || $this->isUnderNullObject($column->key, $level['values']);
     }
 
     /**
