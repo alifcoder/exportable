@@ -53,8 +53,8 @@ final class ExportValidator
     }
 
     /**
-     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and not group,
-     * union or select distinct rows: paging over those is not stable (and an added ORDER BY would not be valid).
+     * The job appends `limit n offset m` to the compiled SQL, so the query must not have its own page, and not group
+     * or union rows: paging over those is not stable (and an added ORDER BY would not be valid).
      *
      * @param  Builder<*>  $query
      *
@@ -71,10 +71,6 @@ final class ExportValidator
         if ($base->groups !== null || $base->havings !== null || $base->unions !== null) {
             throw ExportException::unpageableQuery('group_or_union');
         }
-
-        if ($base->distinct !== false) {
-            throw ExportException::unpageableQuery('distinct');
-        }
     }
 
     /**
@@ -86,6 +82,11 @@ final class ExportValidator
      */
     public static function orderByKey(Builder $query): void
     {
+        // A SELECT DISTINCT only accepts an order over its selected columns: the key is not added to it.
+        if ($query->getQuery()->distinct !== false) {
+            return;
+        }
+
         $model = $query->getModel();
         $last = Arr::last((array) $query->getQuery()->orders);
         $column = is_array($last) ? ($last['column'] ?? null) : null;
