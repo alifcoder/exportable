@@ -9,9 +9,12 @@ use Alif\Export\DTO\Export\ExportCreateDTO;
 use Alif\Export\DTO\Export\ExportTask;
 use Alif\Export\DTO\Export\PreparedQuery;
 use Alif\Export\Enums\ExportFormatEnum;
+use Alif\Export\Enums\ExportPhaseEnum;
 use Alif\Export\Events\ExportFinished;
 use Alif\Export\Exceptions\ExportException;
+use Alif\Export\Helpers\ExportCancellation;
 use Alif\Export\Helpers\ExportConfig;
+use Alif\Export\Helpers\ExportProgress;
 use Alif\Export\Services\Actions\Export\WriteExport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,7 +47,11 @@ final class RunExport implements ShouldQueue
         $this->onQueue(ExportConfig::nullable('queue.name'));
     }
 
-    /** Writes the file to a temporary path, gives it to the file store, and removes it. A failure is announced, not thrown. */
+    /**
+     * Writes the file to a temporary path, gives it to the file store, and removes it. A failure is announced, not
+     * thrown. A cancel is seen when the job starts, before every chunk, before the upload and after it (the stored
+     * file is then deleted); it finishes with `cancelled`.
+     */
     public function handle(WriteExport $write, ExportFileStore $store): void
     {
         $task = null;
@@ -52,10 +59,25 @@ final class RunExport implements ShouldQueue
 
         try {
             $task = ExportTask::fromArray($this->task);
+            ExportCancellation::check($task->id);
+
+            $progress = new ExportProgress($task->id, $task->totalRows);
+            $progress->phase(ExportPhaseEnum::QUERYING);
             $local = tempnam(sys_get_temp_dir(), 'export_') ?: throw ExportException::storageWriteFailed(__('export::messages.storage.temp_file'));
-            $rows = $write($task, $local);
+            $rows = $write($task, $local, $progress);
+            ExportCancellation::check($task->id);
+
+            $progress->phase(ExportPhaseEnum::UPLOADING);
             $name = $task->id.'.'.$task->request->format->extension();
             $fileId = $store->put($task, $local, $name, $task->request->format->mimeType());
+
+            if (ExportCancellation::requested($task->id)) {
+                $store->delete($fileId);
+
+                throw ExportException::cancelled();
+            }
+
+            $progress->finish();
             $finished = new ExportFinished($task, $fileId, $name, $rows, null);
         } catch (Throwable $e) {
             $finished = $this->failure($task ?? $this->placeholder(), $e);

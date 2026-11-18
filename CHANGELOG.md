@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+Added:
+
+- Cancel: `Helpers\ExportCancellation::cancel($id)`. The job stops when it starts, before every chunk and around the upload, deletes what it stored and finishes with `errorCode` `cancelled` (`ExportException::cancelled()`).
+- `ExportProgressed` is sent for every export, with `phase` (`Enums\ExportPhaseEnum`: `queued`, `querying`, `writing`, `uploading`); `queued` is sent by `ExportService` before the job is queued.
+
+Breaking:
+
+- `Contracts\ExportFileStore::delete(string $fileId)` must be implemented.
+- `ExportProgressed` is `(exportId, phase, ?percent, rows, ?totalRows)`; `percent` and `total_rows` are null when the total is unknown.
+- Config: `progress.min_rows` and `progress.step_percent` are gone; `progress.throttle_ms` (fewest milliseconds between two row events) is required.
+- `Helpers\ExportProgress` is created per export (`new ExportProgress($id, $totalRows)`); `WriteExport` takes it as its third argument.
+
 Fixed:
 
 - A text over 32,767 characters no longer fails an xlsx export with `export_failed`: it is cut at Excel's limit.

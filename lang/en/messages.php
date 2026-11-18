@@ -44,6 +44,7 @@ return [
         'storage_write_failed' => 'The export file could not be stored.',
         'invalid_registration' => 'The export is set up wrongly.',
         'invalid_configuration' => 'The export settings are incomplete.',
+        'cancelled' => 'The export was cancelled.',
         'export_failed' => 'The export could not be completed.',
     ],
 ];

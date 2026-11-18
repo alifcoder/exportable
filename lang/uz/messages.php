@@ -44,6 +44,7 @@ return [
         'storage_write_failed' => 'Eksport faylini saqlab bo\'lmadi.',
         'invalid_registration' => 'Eksport noto\'g\'ri sozlangan.',
         'invalid_configuration' => 'Eksport sozlamalari to\'liq emas.',
+        'cancelled' => 'Eksport bekor qilindi.',
         'export_failed' => 'Eksportni bajarib bo\'lmadi.',
     ],
 ];

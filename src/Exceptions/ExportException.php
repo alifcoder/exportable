@@ -123,6 +123,12 @@ final class ExportException extends RuntimeException
         return new self(__('export::messages.storage_write_failed', ['reason' => $reason]), 'storage_write_failed');
     }
 
+    /** The export was cancelled (the flag of `Helpers\ExportCancellation`). */
+    public static function cancelled(): self
+    {
+        return new self(__('export::messages.errors.cancelled'), 'cancelled');
+    }
+
     /** A setting is missing in `config/export.php`. */
     public static function invalidConfiguration(string $key): self
     {

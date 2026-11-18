@@ -32,13 +32,12 @@ return [
         'finished' => true,
     ],
 
-    // Progress events (Events\ExportProgressed) for the client.
+    // Progress events (Events\ExportProgressed) for the client, for every export whatever its size.
     'progress' => [
+        // Also counts the rows on the request: the total behind `percent`. Off, nothing is counted or sent.
         'enabled' => true,
-        // Only exports with at least this many output rows report progress.
-        'min_rows' => 1000,
-        // Minimum percentage points between two events; 1 streams every percent (10 => 11 => ... => 33).
-        'step_percent' => 1,
+        // Fewest milliseconds between two events while rows are read; a phase change is always sent.
+        'throttle_ms' => 500,
     ],
 
     'style' => [

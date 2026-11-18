@@ -44,6 +44,7 @@ return [
         'storage_write_failed' => 'Не удалось сохранить файл экспорта.',
         'invalid_registration' => 'Экспорт настроен неверно.',
         'invalid_configuration' => 'Настройки экспорта заполнены не полностью.',
+        'cancelled' => 'Экспорт отменён.',
         'export_failed' => 'Не удалось выполнить экспорт.',
     ],
 ];

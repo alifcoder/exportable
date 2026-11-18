@@ -14,7 +14,7 @@ Paging is by offset over the host's ORDER BY, which the package ends with the mo
 ## Install
 1. `composer require alifcoder/exportable`
 2. `php artisan vendor:publish --tag=export-config`, set **every** key in `config/export.php` (a missing one fails with `Missing export configuration "export.<key>"`).
-3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id). Links, listing and deletion are the host's. There is no auth contract and no gate/ability/guard setting.
+3. Bind `Contracts\ExportFileStore`: `put(ExportTask, localPath, fileName, mime): string` (returns your file id) and `delete(fileId)` (a file stored while the export was cancelled). Links and listing are the host's. There is no auth contract and no gate/ability/guard setting.
 4. Use `Concerns\HandlesExport` in any `ModelFilter` (a filter with a constructor taking the parameters array, `params()`, `query()`, `apply()`, `isShort()` and a static `$resource`; `static::$shortResource` and `fields()` are read when it has them). Nothing else is implemented:
    - the query is `query()` with the filter applied; `export()` builds it from a copy of the filter without the request's `limit`, `offset`, `paginate`, `per_page` and `page`, so the list keeps using them. The package ends its order with the model's key (an unsorted query is ordered by it), so the host's sort may tie; a query with a limit/offset, `GROUP BY`/`HAVING` or a `UNION` is refused as `unpageable_query` (500) and nothing is queued;
    - the resource is the filter's `static::$resource`.
@@ -60,7 +60,7 @@ Columns are kept in the order the client sent them (document columns, then each 
 | `queue.{connection,name,timeout}` | `connection`/`name` may be `null` but must be present |
 | `stale_margin_seconds` | the "finished" announcement of an export is remembered `queue.timeout` + this many seconds, so it is sent once |
 | `events.finished` | dispatch `ExportFinished` when an export completes or fails; `false` silences it |
-| `progress.{enabled,min_rows,step_percent}` | broadcast `ExportProgressed` for exports of at least `min_rows` rows, at most every `step_percent` points, and a final 100 once the last row is written (the finished event then announces the file) |
+| `progress.{enabled,throttle_ms}` | count the rows on the request and broadcast `ExportProgressed` for every export: on each phase change, while rows are read at most once per `throttle_ms`, and a final 100 right before `ExportFinished` |
 | `style.{date_format,datetime_format,time_format}` | PHP `date()` formats of dates in csv |
 | `style.boolean.{true,false}` | text of boolean cells in csv and xlsx; a translation key is translated |
 | `style.csv.{delimiter,enclosure,line_ending,bom}` | csv field separator and quote (single byte), row ending, UTF-8 byte order mark |
@@ -90,7 +90,8 @@ One export is two steps, on the request and in the queued job; the whole filtere
 | `Helpers\ResourceRows` | both | reads a model through its resource into dotted keys (`partner.name`) and lists (`products`) |
 | `Helpers\DocumentReader` | job | reads the prepared SQL `chunk_size` rows at a time and turns each document into `Line`s (own line, then heading and item lines of each list) |
 | `Helpers\ColumnNode` | job | the requested columns as a tree (document, lists, lists in lists): headings, types, widths |
-| `Helpers\ExportProgress` | job | passes documents through and broadcasts `ExportProgressed` |
+| `Helpers\ExportProgress` | both | broadcasts `ExportProgressed` of one export: `queued` from the service, the job's phases and the documents it passes through |
+| `Helpers\ExportCancellation` | both | the cancel flag: the host sets it with `cancel(id)`, the job checks it |
 | `Helpers\ExportStyle`, `Helpers\Writers\*` | job | the `style.*` settings; `CsvWriter` / `XlsxWriter` write the `Line`s |
 | `Helpers\ExportConfig` | both | reads `config/export.php`; a missing key is an error, the package has no defaults |
 
@@ -99,7 +100,10 @@ The package ships its messages in `uz`, `ru` and `en` (`export::messages.*`): th
 
 ## Events
 - `ExportFinished` (`task`, `fileId`, `fileName`, `rows`, `errorCode`; `succeeded()` is `errorCode === null`) when an export is written or has failed. Switch off with `events.finished`.
-- `ExportProgressed` (`ShouldBroadcastNow`, private channel `export.{id}`, `export.progressed`): `id`, `percent`, `rows`, `total_rows`.
+- `ExportProgressed` (`ShouldBroadcastNow`, private channel `export.{id}`, `export.progressed`): `id`, `percent`, `rows`, `total_rows`, `phase` (`queued`, `querying`, `writing`, `uploading`). `percent` and `total_rows` are null when the total is unknown; `percent` never goes down and is 100 only right before `ExportFinished`.
+
+## Cancel
+`Helpers\ExportCancellation::cancel($id)` sets a cache flag kept `queue.timeout` + `stale_margin_seconds`. The job checks it when it starts (nothing is queried), before every chunk, before the upload and after it (the stored file is removed with `ExportFileStore::delete()`). The temporary file is always removed. The export then finishes with `errorCode` `cancelled`. Who may cancel, and the endpoint, are the host's.
 
 ## Lists (`products`)
 A list column group is written as sub rows under the document row, like the expandable list in the app:
