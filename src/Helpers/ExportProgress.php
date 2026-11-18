@@ -4,61 +4,89 @@ declare(strict_types=1);
 
 namespace Alif\Export\Helpers;
 
-use Alif\Export\DTO\Export\ExportTask;
+use Alif\Export\Enums\ExportPhaseEnum;
 use Alif\Export\Events\ExportProgressed;
 use Generator;
 use Throwable;
 
 /**
- * Passes rows through and reports the percentage of `total_rows` written, at most once per
- * `export.progress.step_percent`, and 100 when the last row is written. Inactive (a plain pass-through) when progress is off or the export is smaller
- * than `export.progress.min_rows`. A listener that fails never fails the export.
+ * Sends `ExportProgressed` for one export, whatever its size: on every phase change, and while documents are read at
+ * most once per `progress.throttle_ms`. `percent` is null when the total is unknown, never goes down and is 100 only
+ * in {@see finish()}. A listener that fails never fails the export.
  */
 final class ExportProgress
 {
-    /**
-     * Passes every row through unchanged and sends a progress event each time another step is reached.
-     *
-     * @template TRow
-     *
-     * @param  iterable<int, TRow>  $rows
-     * @return Generator<int, TRow>
-     */
-    public function track(ExportTask $task, iterable $rows): Generator
+    private ExportPhaseEnum $phase = ExportPhaseEnum::QUEUED;
+
+    private int $rows = 0;
+
+    private ?int $percent;
+
+    private float $sentAt = 0.0;
+
+    public function __construct(private readonly string $exportId, private readonly ?int $totalRows)
     {
-        $total = (int) $task->totalRows;
-        $active = ExportConfig::bool('progress.enabled') && $total > 0 && $total >= ExportConfig::int('progress.min_rows');
-        $step = max(1, ExportConfig::int('progress.step_percent'));
-        $sent = 0;
-        $emitted = 0;
+        $this->percent = $this->hasTotal() ? 0 : null;
+    }
 
-        foreach ($rows as $row) {
-            yield $row;
+    public function phase(ExportPhaseEnum $phase): void
+    {
+        $this->phase = $phase;
+        $this->send();
+    }
 
-            if (! $active) {
-                continue;
+    /**
+     * Passes the documents through and counts them.
+     *
+     * @template TDocument
+     *
+     * @param  iterable<int, TDocument>  $documents
+     * @return Generator<int, TDocument>
+     */
+    public function track(iterable $documents): Generator
+    {
+        foreach ($documents as $document) {
+            if ($this->rows === 0) {
+                $this->phase(ExportPhaseEnum::WRITING);
             }
 
-            $emitted++;
-            // Held below 100 while rows are written; 100 is sent once the last row is out.
-            $percent = min(99, intdiv($emitted * 100, $total));
+            yield $document;
 
-            if ($percent >= $sent + $step) {
-                $sent = $percent;
-                $this->send($task, $percent, $emitted, $total);
+            $this->rows++;
+
+            if ($this->hasTotal()) {
+                // Held below 100 until finish().
+                $this->percent = min(99, intdiv($this->rows * 100, (int) $this->totalRows));
             }
-        }
 
-        if ($active) {
-            $this->send($task, 100, $emitted, $total);
+            if ((microtime(true) - $this->sentAt) * 1000 >= ExportConfig::int('progress.throttle_ms')) {
+                $this->send();
+            }
         }
     }
 
-    /** Sends the progress event. If sending fails, the error is only reported and the export goes on. */
-    private function send(ExportTask $task, int $percent, int $rows, int $total): void
+    /** The last event, sent right before `ExportFinished`. */
+    public function finish(): void
     {
+        $this->percent = 100;
+        $this->send();
+    }
+
+    private function hasTotal(): bool
+    {
+        return $this->totalRows !== null && $this->totalRows > 0;
+    }
+
+    private function send(): void
+    {
+        $this->sentAt = microtime(true);
+
+        if (! ExportConfig::bool('progress.enabled')) {
+            return;
+        }
+
         try {
-            ExportProgressed::dispatch($task->id, $percent, $rows, $total);
+            ExportProgressed::dispatch($this->exportId, $this->phase, $this->percent, $this->rows, $this->totalRows);
         } catch (Throwable $e) {
             report($e);
         }

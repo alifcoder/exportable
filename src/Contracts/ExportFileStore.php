@@ -9,7 +9,7 @@ use Alif\Export\Exceptions\ExportException;
 
 /**
  * Where a finished export file lives. The host implements it (e.g. as an attachment) and binds it; the package
- * only writes a local temporary file and hands it over. Listing, links and deletion are the host's.
+ * only writes a local temporary file and hands it over. Listing and links are the host's.
  */
 interface ExportFileStore
 {
@@ -19,4 +19,7 @@ interface ExportFileStore
      * @throws ExportException storage_write_failed when it cannot be kept.
      */
     public function put(ExportTask $task, string $localPath, string $fileName, string $mimeType): string;
+
+    /** Remove a file kept by put(): the export was cancelled while it was being stored. */
+    public function delete(string $fileId): void;
 }
